@@ -1,0 +1,183 @@
+import {
+  CustomEditor,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type ExtensionUIContext,
+  type KeybindingsManager,
+} from "@earendil-works/pi-coding-agent";
+import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
+
+type CaptureKind = "submit" | "followUp";
+
+// Pi 0.99.2 handles these before routing editor submissions to AgentSession.
+// Match its exact-vs-argument behavior, not every slash-prefixed string.
+// Regression tests exercise the real InteractiveMode callbacks. There is no
+// public built-in-command classification API; keep this seam version-tested.
+const exactCommands = new Set([
+  "settings", "scoped-models", "share", "copy", "session", "changelog",
+  "hotkeys", "fork", "clone", "tree", "trust", "logout", "new", "reload",
+  "debug", "arminsayshi", "dementedelves", "resume", "quit",
+]);
+const argumentCommands = new Set([
+  "model", "thinking", "export", "import", "bug", "name", "login", "compact",
+]);
+
+/** Only identify controls the native UI actually consumes, never prompt templates. */
+export function isPromptCapture(
+  text: string,
+  kind: CaptureKind,
+  extensionCommands: readonly string[],
+): boolean {
+  const value = text.trim();
+  if (!value) return false;
+  if (value.startsWith("/")) {
+    const space = value.indexOf(" ");
+    const name = space < 0 ? value.slice(1) : value.slice(1, space);
+    if (extensionCommands.includes(name)) return false;
+    if (kind === "submit" &&
+        (argumentCommands.has(name) || (space < 0 && exactCommands.has(name)))) {
+      return false;
+    }
+  }
+  // Busy Alt+Enter sends even !commands as follow-up *prompt text*.
+  if (kind === "submit" && value.startsWith("!")) {
+    const command = value.slice(value.startsWith("!!") ? 2 : 1).trim();
+    if (command) return false;
+  }
+  return true;
+}
+
+export interface CaptureHooks {
+  /** Synchronous invalidation only. Must not await cleanup at this boundary. */
+  captured(): void;
+  extensionCommands(): readonly string[];
+  /** Used only to classify native follow-up routing, NOT to gate dictation. */
+  followUpUsesSubmit(): boolean;
+}
+
+/** Stock editing/shortcuts, plus observation of actual public submit callbacks. */
+export class DictationEditor extends CustomEditor {
+  #hooks: CaptureHooks;
+  #submitWrapper?: (text: string) => void;
+  #followUpWrapper?: () => void;
+  #initialText: string | undefined;
+
+  constructor(
+    tui: TUI,
+    theme: EditorTheme,
+    keybindings: KeybindingsManager,
+    hooks: CaptureHooks,
+    initialText?: string,
+  ) {
+    super(tui, theme, keybindings);
+    this.#hooks = hooks;
+    this.#initialText = initialText;
+  }
+
+  override setText(text: string): void {
+    // Pi transfers getText(), not getExpandedText(), when installing editors.
+    // Hydrate its FIRST transfer from the expanded snapshot so the new editor
+    // never contains an opaque marker without its paste map (even after undo).
+    const initial = this.#initialText;
+    this.#initialText = undefined;
+    super.setText(initial ?? text);
+  }
+
+  #capture(text: string, kind: CaptureKind): void {
+    if (isPromptCapture(text, kind, this.#hooks.extensionCommands())) {
+      this.#hooks.captured();
+    }
+  }
+
+  override handleInput(data: string): void {
+    // Pi wires these public callbacks after invoking the factory. Wrap them
+    // lazily, once per assigned callback, before delegating native input.
+    // Observing raw Enter would also mistake autocomplete/dialog confirmation
+    // for submission. Observing the later `input` event misses compaction queues.
+    if (this.onSubmit && this.onSubmit !== this.#submitWrapper) {
+      const submit = this.onSubmit;
+      this.#submitWrapper = (text) => {
+        this.#capture(text, "submit");
+        submit(text);
+      };
+      this.onSubmit = this.#submitWrapper;
+    }
+    const followUp = this.actionHandlers.get("app.message.followUp");
+    if (followUp && followUp !== this.#followUpWrapper) {
+      this.#followUpWrapper = () => {
+        // Idle Alt+Enter invokes onSubmit in the same stack; observe it there.
+        // Busy/compaction follow-up captures independently, before any await.
+        if (!this.#hooks.followUpUsesSubmit()) {
+          this.#capture(this.getExpandedText(), "followUp");
+        }
+        followUp();
+      };
+      this.onAction("app.message.followUp", this.#followUpWrapper);
+    }
+    super.handleInput(data);
+  }
+}
+
+export interface EditorBoundary {
+  isInstalled(): boolean;
+  dispose(): void;
+}
+
+/** Refuse to silently replace another extension's editor. */
+export function installEditorBoundary(
+  pi: Pick<ExtensionAPI, "getCommands">,
+  ctx: Pick<ExtensionContext, "ui" | "isIdle">,
+  captured: () => void,
+): EditorBoundary {
+  const { ui } = ctx;
+  if (ui.getEditorComponent()) {
+    throw new Error("Dictation requires the stock Pi editor; another editor is installed.");
+  }
+  const factory = (tui: TUI, theme: EditorTheme, kb: KeybindingsManager) =>
+    new DictationEditor(tui, theme, kb, {
+      captured,
+      extensionCommands: () => pi.getCommands()
+        .filter((command) => command.source === "extension")
+        .map((command) => command.name),
+      followUpUsesSubmit: () => ctx.isIdle(),
+    }, ui.getEditorText());
+  ui.setEditorComponent(factory);
+  return {
+    isInstalled: () => ui.getEditorComponent() === factory,
+    dispose: () => {
+      if (ui.getEditorComponent() !== factory) return;
+      // Restore through expanded text for the same reason as first hydration.
+      ui.setEditorText(ui.getEditorText());
+      ui.setEditorComponent(undefined);
+    },
+  };
+}
+
+/** One delivery lease; cancellation and append linearize synchronously. */
+export class DraftLease {
+  #valid = true;
+
+  invalidate(): void {
+    this.#valid = false;
+  }
+
+  get valid(): boolean {
+    return this.#valid;
+  }
+
+  append(
+    ui: Pick<ExtensionUIContext, "getEditorText" | "setEditorText">,
+    text: string,
+    isCurrent: () => boolean,
+  ): boolean {
+    const transcript = text.trim();
+    if (!transcript || !this.#valid || !isCurrent()) return false;
+    // No await, cursor paste, main-agent message, or starting-draft comparison.
+    // Keep all existing whitespace and references. Add a space ONLY if needed.
+    this.#valid = false;
+    const draft = ui.getEditorText();
+    const separator = draft && !/\s$/u.test(draft) ? " " : "";
+    ui.setEditorText(draft + separator + transcript);
+    return true;
+  }
+}
