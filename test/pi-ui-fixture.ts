@@ -74,6 +74,7 @@ interface NativeModeFixture {
   compactionQueuedMessages: { text: string; mode: string }[];
   onInputCallback?: (text: string) => void;
   setupEditorSubmitHandler(): void;
+  setupExtensionShortcuts(runner: { getModelRegistry(): unknown; getShortcuts(config: KeybindingsConfig): Map<string, { handler(ctx: unknown): unknown }> }): void;
   createExtensionUIContext(): ExtensionUIContext;
   handleFollowUp(): Promise<void>;
   flushPendingBashComponents(): void;

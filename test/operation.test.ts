@@ -287,3 +287,15 @@ test("bounded helper distinguishes timeout/cancellation and checks ignored abort
   const other = new AbortController();
   await assert.rejects(bounded(() => new Promise(() => {}), other.signal, 1), TimeoutError);
 });
+
+test("submission after delivery during held cleanup does not report an unfinished-result discard", async () => {
+  const h = harness(); h.config.correction.enabled = false;
+  const cleanup = deferred<void>(); h.holdCleanup(cleanup.promise);
+  await advance(h, "transcribing");
+  h.transcription.resolve("already delivered fixture"); await nextTask();
+  assert.equal(h.text(), "typed draft already delivered fixture");
+  assert.equal(h.controller.phase, "cleaning");
+  h.controller.cancel("submitted");
+  assert.deepEqual(h.notices, []);
+  cleanup.resolve(); await h.controller.settled();
+});

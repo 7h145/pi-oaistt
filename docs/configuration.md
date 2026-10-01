@@ -1,8 +1,8 @@
 # Configuration reference
 
-**The extension is still being built.** This reference describes the implemented
-settings and audio/transcription adapters, not a working installation procedure.
-Pi command and lifecycle integration are pending.
+**v0.1.0 is a development build for initial validation.** See the
+[README](../README.md) for loading and first use. Command/lifecycle integration is
+implemented; real microphone and provider/terminal acceptance are still pending.
 
 Settings belong in `pi-oaistt.json` under Pi's configured agent directory. There is
 no project-level config layer. Reading defaults does not create a file; changing
@@ -69,8 +69,8 @@ Boxed setups must already have host-approved audio access and container recorder
 tools. Exposing a Pulse/PipeWire-Pulse socket can grant **broad host audio access
 and control**, not microphone-only permission; a read-only filesystem bind does
 not make its protocol read-only. This extension does not mount sockets, start host
-services or alter routing/default/mute/volume state. No recorder is exposed as a Pi
-command yet.
+services or alter routing/default/mute/volume state. F8 and `/oaistt` start/stop
+only the operation-owned recorder; `/oaistt cancel` discards unfinished work.
 
 ## Transcription
 
@@ -104,9 +104,10 @@ that failure notice. Attempt budget: 1–120 seconds; total: 1–300 seconds.
 
 `context.maxChars` counts **Unicode code points**, including labels/separators,
 not UTF-16 code units. Bounds: 0–100000; 0 disables conversation context, not
-correction. The correction implementation will use committed compaction-aware
-user/assistant text and summaries, not tools, images, thinking, shell or editor
-content. Ordinary text/summaries may still describe sensitive file/tool content;
+correction. Correction uses Pi's committed active-branch session projection,
+respecting compaction, branch summaries and context-edit omissions. It retains
+eligible user/assistant text and active summaries, not direct tool results,
+images, thinking, shell, custom messages, metadata or editor content. Ordinary text/summaries may still describe sensitive file/tool content;
 exclusions are not redaction.
 
 Audio goes to the transcription endpoint. **Every attempted correction provider**
@@ -115,7 +116,16 @@ the main-agent provider. Explicit remote candidates permit those destinations.
 For local-only use, set a local STT URL/auth policy and list only locally configured
 Pi models; use `context.maxChars: 0` to omit conversation history. Cancellation
 cannot recall information already sent to a provider; provider retention policies
-still apply. No per-turn privacy warning is planned.
+still apply. There is no per-turn privacy warning.
+
+Candidates resolve and stream through Pi's public model registry. Unknown models,
+missing auth, errors, invalid/empty output and per-attempt timeouts advance through
+only your list; total timeout/exhaustion uses raw text with one muted notice.
+Cancellation never delivers either result. Requests are isolated from the agent:
+no tools, main system prompt, selected-model fallback, chat turn or prompt queue.
+Each candidate receives fresh request objects from the same initial text snapshot.
+The model is instructed to make minimal corrections; JSON isolation is not a
+semantic prompt-injection guarantee, and correction quality needs live testing.
 
 ## Source changes and saving
 
@@ -126,5 +136,19 @@ an intervening file edit fail the save rather than overwriting them. Writes repl
 the config atomically through a private temporary file.
 
 Each dictation uses the settings it started with. Changing the source or config
-cannot reroute an operation already in progress. User-facing source commands will
-be documented when they are implemented.
+cannot reroute an operation already in progress.
+
+- `/oaistt source`: ask for a source name in a cancellable Pi input dialog.
+- `/oaistt source <name>`: temporary named source.
+- `/oaistt source default`: temporary return to env/default routing (`PULSE_SOURCE`
+  remains an explicit environment override).
+- Add `--save` to either explicit choice, or `/oaistt source --save` to save the
+  current override. No save happens without that flag.
+- `/oaistt reload`: re-read file settings, retaining temporary source overrides.
+- `/oaistt status`: show phase and coarse configuration policy without echoing
+  endpoint, source, credential or transcript values.
+
+Source changes and settings reloads affect the next operation only. Invalid or
+changed files fail closed; fix the file and explicitly reload rather than relying
+on fallback defaults. A temporary override does not survive an extension-code
+reload/new runtime unless saved. The UI does not enumerate or change host sources.

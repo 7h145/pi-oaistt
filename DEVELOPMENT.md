@@ -64,7 +64,7 @@ custom-editor composition is not claimed.
 
 ### Automated results
 
-`npm run check` and **36 tests** pass. Tests use real Pi 0.99.2 editor/UI callback
+At this milestone, `npm run check` and **36 tests** passed. Tests use real Pi 0.99.2 editor/UI callback
 implementations and real regular/fullscreen TUI focus/input routing on a synthetic
 terminal. The test-only host fixture accesses private InteractiveMode wiring to
 isolate native callbacks; it fakes the agent/network/auth and unrelated UI panels,
@@ -111,7 +111,7 @@ an orphan. Adapter disposal itself must be idempotent and bounded.
 Total suite: **102 passing tests** plus typecheck. Controller tests use deterministic
 recorder/provider fakes, held cleanup and mock deadlines; they exercise cancellation,
 submission and session-discard reasons in starting, recording, stopping,
-transcribing and correcting. Production Pi lifecycle wiring and presentation are
+transcribing and correcting. At this milestone, production Pi lifecycle wiring and presentation were
 still pending; fake pipeline success is not a live microphone/provider claim.
 
 ## Recorder and compatible transcription adapter
@@ -162,16 +162,76 @@ Bluetooth latency, exact wall/PCM equality or complete extension UX. Production
 still refuses playback monitors as mic sources. Actual microphone/terminal/provider
 matrix and speech-tail review remain release checks.
 
-## Next implementation work / unvalidated acceptance
+## Isolated correction and public Pi integration
 
-- Pi command/lifecycle adapters, including pre-start auth validation and real
-  status/notices/timer cleanup.
-- Compaction-aware text/summaries context; isolated correction; explicit ordered
-  candidates, owned cancellation and candidate/total deadlines.
-- F8/commands, source adjustment, explicit persistence, install/config/privacy
-  docs and package manifest. No dictation extension is exposed yet.
-- Full interactive session lifecycle/auth/provider tests, live busy-agent behavior,
-  actual terminal/tmux F8, normal/boxed audio and local/remote STT matrix, correction
-  quality and footer visibility. Synthetic gate results do not establish these.
+Implemented `src/correction.ts`: consume `buildSessionProjection()` rather than
+raw history or a flattened prompt. Preserve eligible committed active-branch text
+and projected compaction/branch summaries, respecting context-edit omissions.
+Exclude by source-entry provenance as well as projected role: custom messages and
+metadata can otherwise look like user messages. Zero context budget never reads
+history. Newest eligible text is budgeted in Unicode code points, including labels;
+all candidates receive the same initial context/transcript snapshot.
+
+Correction streams through the public Pi model registry with explicit ordered
+models, no tools and an isolated system prompt/JSON data message. Fresh request
+objects prevent a provider mutating a later attempt. Candidate errors/missing
+auth/empty or invalid output/attempt timeout advance; exhaustion/total timeout uses
+raw text. Cancellation delivers neither. No selected model, main signal, main
+prompt, agent turn, prompt queue or result persistence is used.
+
+`index.ts` and `pi.extensions` expose the extension directory. The factory has no
+config I/O, timers, processes or provider requests. TUI session start installs the
+editor boundary and loads settings; RPC/print/JSON never record or read config.
+F8/`/oaistt`, cancel/help/status/settings reload, temporary source input and explicit
+save are wired. Credentials validate before capture. One operation captures its
+pipeline/session/registry references; later setting changes cannot reroute it.
+Pre-navigation events synchronously cancel even if navigation is later vetoed.
+Shutdown/reload cancels owned work, clears feedback and restores the stock editor.
+An editor takeover is never overwritten or allowed to receive an obsolete result.
+
+Feedback uses only public `setStatus`/`setWidget`: stable status key
+`footer-compositor:right:80:pi-oaistt` (optional pi-assorted compositor convention),
+red `● REC mm:ss`, muted phases, one above-editor widget and a cleared owned timer.
+No footer takeover or private presentation patch. Muted notices report fixed
+categories/coarse policy, never source/endpoint/credential/transcript values.
+Actual footer/compositor rendering remains unvalidated.
+
+After a clean `npm ci --ignore-scripts`, **175 tests and typecheck pass** on Node
+26.10.0/Pi 0.99.2. New evidence includes:
+
+- Real public discovery/jiti/ExtensionRunner of a synthetic project's symlinked
+  package directory; command/shortcut registration, ready/help/status, TUI startup
+  and shutdown/restoration. Config/auth are temporary/synthetic; no provider/audio
+  request occurs. This is loader evidence, not a full live user session.
+- Real native F8 dispatcher and regular/fullscreen TUI input through the adapter,
+  idle/streaming/compaction; stop/latest-draft delivery without a main-agent action.
+- Integrated submit/follow-up synchronous cancellation; Escape forwarding vs
+  dedicated cancel; navigation/reload/late correction; retained cleanup ownership;
+  timer/widget clearing and editor takeover. Backend work is synthetic here.
+- Real SessionManager projection with summaries/context edits/branch selection;
+  source exclusions and Unicode budgets; malicious data isolation and fresh-request
+  failover; abort/attempt/total budgets; native public ModelRuntime/provider-registry
+  streaming with faux auth, including missing-auth skip. No external LLM is called.
+- Regression: a prompt submitted after successful delivery while cleanup remains
+  held does not emit a false unfinished-result-discard notice.
+
+`npm ci` still reports one high-severity transitive audit issue (brace-expansion in
+the Pi development tree). No blind dependency upgrade/audit fix was applied;
+review before release. The package is **0.1.0**, remains private, and has no release
+tag. Pre-v1 compatibility is not promised; v1.0.0 is reserved for the first real
+product, not an implementation-scope label.
+
+## Remaining unvalidated acceptance
+
+- Owner's live `/reload`, command/status/source-save/dialog interaction, real mic
+  recording and first/last spoken words; physical terminal/tmux F8 and collisions.
+- Live busy-agent/compaction/navigation/auth/reload behavior and semantic
+  clipboard/image-provider preservation in a full interactive Pi session.
+- Stock/narrow/replacement footer and optional compositor visibility/layout.
+- Normal/boxed audio, local/remote STT/auth and ordered correction-provider matrix;
+  correction quality, domain vocabulary, context disambiguation and data-injection
+  resilience. JSON isolation is not proof of semantic resistance.
+- Node 22.19 live validation and later Pi compatibility. API declaration coverage
+  and a Node 26 fixture run are not evidence for every supported environment.
 
 No real audio, transcript, credentials or user configuration are test fixtures.

@@ -84,17 +84,18 @@ interface Operation {
   stopPromise: Promise<void>;
   recording?: Recording;
   done: Promise<void>;
+  pipeline: Pipeline;
 }
 
 /** Dictation ownership is independent of the main agent. No Pi submission API. */
 export class OperationController {
   #active?: Operation;
-  #pipeline: Pipeline;
-  constructor(pipeline: Pipeline) { this.#pipeline = pipeline; }
+  #pipeline?: Pipeline;
+  constructor(pipeline?: Pipeline) { this.#pipeline = pipeline; }
   get phase(): Phase { return this.#active?.phase ?? "idle"; }
   get active(): boolean { return this.#active !== undefined; }
 
-  toggle(config: Config, owner: DeliveryOwner): void {
+  toggle(config: Config, owner: DeliveryOwner, pipeline = this.#pipeline): void {
     const current = this.#active;
     if (current) {
       if (current.phase === "starting" || current.phase === "recording") {
@@ -104,13 +105,14 @@ export class OperationController {
       }
       return;
     }
+    if (!pipeline) throw new DictationError("Dictation pipeline is not configured.");
     let stopRequested!: () => void;
     const stopPromise = new Promise<void>((resolve) => { stopRequested = resolve; });
     const op: Operation = {
       phase: "starting", config: configSnapshot(config), owner,
       abort: new AbortController(), lease: new DraftLease(),
       cancelled: false, stopped: false, stopRequested, stopPromise,
-      done: Promise.resolve(),
+      done: Promise.resolve(), pipeline,
     };
     this.#active = op;
     // Allocate operation synchronously; release the handler before any lifetime
@@ -140,7 +142,7 @@ export class OperationController {
   /** Synchronous invalidation; cleanup completion can be awaited separately. */
   cancel(reason: CancelReason = "cancelled"): void {
     const op = this.#active;
-    if (!op || op.cancelled) return;
+    if (!op || op.cancelled || op.phase === "cleaning") return;
     const visible = op.owner.isCurrent();
     op.cancelled = true;
     op.lease.invalidate();
@@ -167,7 +169,7 @@ export class OperationController {
   async #run(op: Operation): Promise<void> {
     try {
       this.#check(op);
-      op.recording = this.#pipeline.record(op.config, op.abort.signal, {
+      op.recording = op.pipeline.record(op.config, op.abort.signal, {
         limit: () => this.#stop(op),
         fail: (error) => {
           if (!this.#current(op)) return;
@@ -187,7 +189,7 @@ export class OperationController {
       this.#check(op);
       this.#phase(op, "transcribing");
       const raw = await bounded(
-        (signal) => this.#pipeline.transcribe(audio, op.config, signal),
+        (signal) => op.pipeline.transcribe(audio, op.config, signal),
         op.abort.signal, op.config.transcription.timeoutSeconds * 1000,
       );
       this.#check(op);
@@ -197,7 +199,7 @@ export class OperationController {
         this.#phase(op, "correcting");
         try {
           result = await bounded(
-            (signal) => this.#pipeline.correct(raw, op.config, signal),
+            (signal) => op.pipeline.correct(raw, op.config, signal),
             op.abort.signal, op.config.correction.totalTimeoutSeconds * 1000,
           );
         } catch {
