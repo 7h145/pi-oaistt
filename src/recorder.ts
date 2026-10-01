@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt recorder
+ *
+ * Purpose: capture bounded private WAV audio from an explicit Linux microphone route.
+ * Strategy: preflight Pulse sources and own parecord startup, stop, reap and disposal.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

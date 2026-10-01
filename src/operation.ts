@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt owned operation
+ *
+ * Purpose: control one cancellable dictation independently of the main agent.
+ * Strategy: freeze each pipeline/settings snapshot and guard delivery and cleanup.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import { configSnapshot, type Config } from "./config.ts";
 import { DraftLease } from "./draft.ts";
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";

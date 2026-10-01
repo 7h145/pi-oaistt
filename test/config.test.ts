@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt config tests
+ *
+ * Purpose: verify config behavior without real audio, credentials or provider calls.
+ * Strategy: combine synthetic inputs and controlled failures with relevant real APIs.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";

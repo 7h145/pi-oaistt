@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt synthetic recorder child
+ *
+ * Purpose: exercise process and WAV lifecycles without microphone access.
+ * Strategy: emit synthetic PCM with explicit controllable stop/failure behavior.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 // Synthetic child only. Never opens a device or emits user data.
 import { writeFileSync } from 'node:fs';
 const [mode, path] = process.argv.slice(2);

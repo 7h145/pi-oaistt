@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt transcription client
+ *
+ * Purpose: send validated WAV audio to the configured compatible transcription URL.
+ * Strategy: bound multipart requests/results and redact failures without redirects.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import { readFile, stat } from "node:fs/promises";
 import type { Config } from "./config.ts";
 import { bounded, DictationError, type AudioFile } from "./operation.ts";

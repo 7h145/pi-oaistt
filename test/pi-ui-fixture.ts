@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt native Pi UI fixture
+ *
+ * Purpose: exercise native editor/input wiring without a live agent or terminal.
+ * Strategy: isolate test-only InteractiveMode wiring and use Pi's own TUI registry.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

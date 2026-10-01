@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt isolated correction
+ *
+ * Purpose: minimally correct transcription with bounded eligible conversation context.
+ * Strategy: project committed text and try only ordered explicit Pi registry models.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import type { Context, AssistantMessage } from "@earendil-works/pi-ai";
 import type { ModelRegistry, ExtensionContext } from "@earendil-works/pi-coding-agent";
 export type SessionReader = Pick<ExtensionContext["sessionManager"], "buildSessionProjection">;

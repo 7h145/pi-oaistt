@@ -115,3 +115,9 @@ private; no npm publication or v1 release is implied.
 [DEVELOPMENT.md](DEVELOPMENT.md) separates automated/API evidence from live checks
 and remaining acceptance work. A playback-monitor/local Whisper check succeeded;
 that is **not microphone validation**.
+
+## License and attribution
+
+[MIT](LICENSE). Copyright (c) 2026 thias <github.attic@typedef.net>.
+Source headers credit thias and OpenAI Codex (gpt-6.1-sol), using the owner's
+requested attribution style. Official Git attribution belongs to thias.

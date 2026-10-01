@@ -27,5 +27,7 @@
     "extensions": [
       "./index.ts"
     ]
-  }
+  },
+  "license": "MIT",
+  "author": "thias <github.attic@typedef.net>"
 }

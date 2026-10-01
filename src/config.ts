@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt configuration
+ *
+ * Purpose: validate settings and resolve explicit credential/source policies.
+ * Strategy: use data-only defaults, frozen snapshots and opt-in atomic source saves.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";

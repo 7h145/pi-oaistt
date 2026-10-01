@@ -1,3 +1,16 @@
+/**
+ * pi-oaistt interactive extension
+ *
+ * Purpose: coordinate dictation controls, session ownership and visible phase feedback.
+ * Strategy: delegate bounded work and retain public editor, lifecycle and UI seams.
+ *
+ * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
+ * License: MIT
+ * Version: 0.1.0
+ * Date: 2026-10-01
+ * Last verified with Pi: 0.99.2 (synthetic APIs)
+ */
+
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ConfigError, ConfigStore, parseConfig, transcriptionKey, type Config } from "./config.ts";
 import { correct } from "./correction.ts";
