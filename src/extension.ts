@@ -52,6 +52,7 @@ class Feedback {
   #checkEditor: () => boolean;
   #phase: Phase = "idle";
   #since = 0;
+  #lastText?: string;
   #timer?: ReturnType<typeof setInterval>;
   constructor(ctx: ExtensionContext, clock: () => number, current: () => boolean, checkEditor: () => boolean) {
     this.#ctx = ctx; this.#clock = clock; this.#current = current; this.#checkEditor = checkEditor;
@@ -65,7 +66,7 @@ class Feedback {
     this.#timer = setInterval(() => {
       if (!this.#current()) { clearInterval(this.#timer); this.#timer = undefined; return; }
       if (!this.#checkEditor()) return;
-      if (this.#phase === "recording") this.#render();
+      this.#render(); // Re-evaluate the active theme even during static phases.
     }, 1000);
   }
   #render(): void {
@@ -80,11 +81,13 @@ class Feedback {
         correcting: "Correcting…", cleaning: "Cleaning up…", idle: "" }[this.#phase];
       text = this.#ctx.ui.theme.fg("muted", label);
     }
+    if (text === this.#lastText) return;
+    this.#lastText = text;
     this.#ctx.ui.setStatus(STATUS_KEY, text);
     this.#ctx.ui.setWidget(WIDGET_KEY, [text], { placement: "aboveEditor" });
   }
   clear(): void {
-    clearInterval(this.#timer); this.#timer = undefined; this.#phase = "idle";
+    clearInterval(this.#timer); this.#timer = undefined; this.#phase = "idle"; this.#lastText = undefined;
     if (!this.#current()) return;
     this.#ctx.ui.setStatus(STATUS_KEY, undefined);
     this.#ctx.ui.setWidget(WIDGET_KEY, undefined);
@@ -177,17 +180,21 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     const session = ctx.sessionManager;
     const registry = ctx.modelRegistry;
     let lostEditorNotice = false;
+    let resultFinished = false;
     const delivery: DeliveryOwner = {
       ui: ctx.ui,
       isCurrent: () => live(current) && owner === delivery && current.boundary!.isInstalled(),
-      phase: (phase) => feedback.phase(phase),
+      phase: (phase) => {
+        if (phase === "idle") resultFinished = true; // Cleanup can outlive delivery/failure/cancel.
+        feedback.phase(phase);
+      },
       notice: (text) => { if (live(current) && owner === delivery) notice(ctx, text); },
     };
     owner = delivery;
     const feedback = new Feedback(ctx, deps.clock, () => live(current) && owner === delivery, () => {
       if (current.boundary!.isInstalled()) return true;
       controller.cancel("editor changed"); feedback.clear();
-      if (!lostEditorNotice) { lostEditorNotice = true; notice(ctx, "Dictation discarded: editor changed."); }
+      if (!resultFinished && !lostEditorNotice) { lostEditorNotice = true; notice(ctx, "Dictation discarded: editor changed."); }
       return false;
     });
     current.feedback = feedback;
@@ -199,7 +206,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     void controller.settled().then(() => {
       if (!live(current) || owner !== delivery) return;
       feedback.clear();
-      if (!current.boundary!.isInstalled() && !lostEditorNotice) notice(ctx, "Dictation discarded: editor changed.");
+      if (!resultFinished && !current.boundary!.isInstalled() && !lostEditorNotice) notice(ctx, "Dictation discarded: editor changed.");
       if (!controller.active) owner = undefined;
     });
   }
@@ -225,7 +232,8 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       if (live(current) && current.config) notice(ctx, "Dictation configuration reloaded.");
       return;
     }
-    if (parts[0] !== "source" || parts.length > 3 || (parts.length === 3 && parts[2] !== "--save")) {
+    if (parts[0] !== "source" || parts.length > 3 ||
+        (parts.length === 3 && (parts[2] !== "--save" || parts[1] === "--save"))) {
       notice(ctx, USAGE); return;
     }
     current.changing = true;

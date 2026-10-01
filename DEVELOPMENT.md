@@ -232,6 +232,34 @@ in these engineering notes or fixtures.
 This establishes one initial live transcription/draft-delivery success in the
 owner's current environment, not the broader hardware/provider/interaction matrix.
 
+## Source-dialog and feedback regression checks
+
+**196 tests and typecheck pass** after extending the test-only native fixture with
+real Pi source dialogs, widget containers and stock footer rendering. Agent/session
+stats and footer data remain synthetic; no Git watcher, audio or provider is used.
+Production still imports only public APIs.
+
+New checks exercise temporary source choices, explicit source-only persistence,
+default restoration and immutable active routing with a real temporary ConfigStore.
+Native dialog Enter is not prompt submission; dialog Escape restores typing focus
+without aborting the agent or dictation. Delivery behind an open source dialog
+preserves its focus and appends only to the main draft. Shutdown closes the dialog;
+the real public ExtensionRunner can invalidate before its old command settles
+without permitting a stale choice/write/notice.
+
+Native regular/fullscreen stock and replacement-footers are rendered at 12/20/80
+columns. Every measured line fits, REC remains in the above-editor widget, the
+replacement footer is untouched and cancellation clears owned feedback. This is
+synthetic renderer evidence, not the full live/compositor layout matrix.
+
+Three new failing regression tests led to fixes: reject duplicate source `--save`
+flags before any mutation, re-evaluate phase colors after theme changes during
+processing, and suppress false editor-loss discard notices after result work has
+already finished but recorder cleanup remains held. The existing one-second
+ownership timer refreshes only changed text, avoiding repeated widget replacement
+when the phase/theme is unchanged. See the [live checklist](docs/validation.md)
+for owner-driven checks without retaining private test content.
+
 ## Remaining unvalidated acceptance
 
 - Broader live reload, command/status/source-save/dialog interaction, microphone

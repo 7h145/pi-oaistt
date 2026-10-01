@@ -14,14 +14,15 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { setImmediate as nextTask } from "node:timers/promises";
-import { SessionManager, type ExtensionAPI, type ExtensionContext, type ExtensionCommandContext,
+import { SessionManager, initTheme, type ExtensionAPI, type ExtensionContext, type ExtensionCommandContext,
   type ModelRegistry, type RegisteredCommand } from "@earendil-works/pi-coding-agent";
 import { ConfigStore, parseConfig, type Config } from "../src/config.ts";
-import { registerDictation, STATUS_KEY, WIDGET_KEY } from "../src/extension.ts";
+import { registerDictation, STATUS_KEY, WIDGET_KEY, type Dependencies } from "../src/extension.ts";
 import { createPiUI } from "./pi-ui-fixture.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,9 +30,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const open: Array<() => Promise<void>> = [];
-afterEach(async () => { for (const dispose of open.splice(0)) await dispose(); });
+afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
-function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean } = {}) {
+function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean;
+  store?: Dependencies["store"]; nativeFeedback?: boolean } = {}) {
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
     mode: options.fullscreen ? "fullscreen" : "regular" });
   const notices: string[] = [];
@@ -39,11 +41,15 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   const widgets = new Map<string, string[] | undefined>();
   const ui = { ...native.ui,
     notify: (text: string) => notices.push(text.replace(/\x1b\[[0-9;]*m/g, "")),
-    setStatus: (key: string, value: string | undefined) => { statuses.set(key, value); },
+    setStatus: (key: string, value: string | undefined) => {
+      statuses.set(key, value); if (options.nativeFeedback) native.ui.setStatus(key, value);
+    },
     setWidget: (key: string, value: unknown) => {
       assert.ok(value === undefined || Array.isArray(value)); widgets.set(key, value as string[] | undefined);
+      if (options.nativeFeedback) native.ui.setWidget(key, value as string[] | undefined, { placement: "aboveEditor" });
     },
   };
+  Object.defineProperty(ui, "theme", { get: () => native.ui.theme });
   const events = new Map<string, Array<(event: any, ctx: ExtensionContext) => unknown>>();
   let command!: Omit<RegisteredCommand, "name" | "sourceInfo">;
   let shortcut!: { handler(ctx: ExtensionContext): void | Promise<void> };
@@ -77,7 +83,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
     registerShortcut: (key: string, value: typeof shortcut) => { assert.equal(key, "f8"); shortcut = value; },
   } as unknown as ExtensionAPI;
   const result = registerDictation(pi, {
-    store: { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {} },
+    store: options.store ?? { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {} },
     key: () => undefined, clock: () => clock,
     record: (config, signal) => { captures++; signals.push(signal); settings.push(config);
       return { ready: ready.promise, stop: async () => { stops++; return { path: "/synthetic.wav", bytes: 100 }; },
@@ -244,4 +250,147 @@ test("invalid config and missing credential block capture; explicit config reloa
     await handlers.get("session_shutdown")!({ reason: "quit" }, ctx); native.stop();
     assert.equal(JSON.parse(await readFile(store.path, "utf8")).transcription.apiKeyEnv, null);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+async function sourceHarness(options: Parameters<typeof harness>[0] = {}) {
+  const dir = await mkdtemp(join(tmpdir(), "oaistt-source-command-test-"));
+  open.push(() => rm(dir, { recursive: true, force: true }));
+  const store = new ConfigStore(dir);
+  const original = { recorder: { maxDurationSeconds: 12 }, transcription: {
+    endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", apiKeyEnv: null, model: "fixture-stt",
+  }, correction: { enabled: false } };
+  await writeFile(store.path, JSON.stringify(original));
+  const h = harness({ ...options, store });
+  await h.start();
+  return { h, store, dir, original, disk: async () => JSON.parse(await readFile(store.path, "utf8")) };
+}
+
+test("source commands apply temporarily, explicitly save only source, and retain active settings", async () => {
+  const { h, store, dir, original, disk } = await sourceHarness();
+  await h.command("source fixture-first"); assert.deepEqual(await disk(), original);
+  await h.command(""); await nextTask();
+  assert.equal(h.settings[0]!.recorder.source, "fixture-first");
+  await h.command("source fixture-second --save");
+  assert.equal(h.settings[0]!.recorder.source, "fixture-first");
+  assert.deepEqual(await disk(), { ...original, recorder: { ...original.recorder, source: "fixture-second" } });
+  assert.equal((await new ConfigStore(dir).load()).recorder.source, "fixture-second");
+  await h.command("source default");
+  assert.equal((await store.load()).recorder.source, null);
+  assert.equal((await disk()).recorder.source, "fixture-second");
+  await h.command("source --save"); assert.equal((await disk()).recorder.source, null);
+  await h.command("cancel"); await h.controller.settled();
+});
+
+test("duplicate save flags and malformed controls cannot mutate source or disk", async () => {
+  const { h, store, original, disk } = await sourceHarness();
+  for (const args of ["source --save --save", "source fixture unexpected", "source fixture --save extra", "unknown fixture"]) {
+    await h.command(args);
+    assert.equal((await store.load()).recorder.source, null); assert.deepEqual(await disk(), original);
+  }
+  assert.equal(h.counts().captures, 0);
+});
+
+test("native source-dialog Enter chooses source, not a user-prompt submission or operation discard", async () => {
+  const { h, original, disk } = await sourceHarness({ streaming: true });
+  h.ui.setEditorText("existing fixture draft"); await h.command(""); await nextTask();
+  const choosing = h.command("source"); await nextTask();
+  h.terminal.send("fixture-dialog-source"); h.terminal.send("\r"); await choosing;
+  assert.equal(h.controller.phase, "recording"); assert.equal(h.signals[0]!.aborted, false);
+  assert.equal(h.ui.getEditorText(), "existing fixture draft"); assert.equal(h.promptCalls.length, 0);
+  assert.deepEqual(await disk(), original); assert.equal(h.main.signal.aborted, false);
+  await h.command(""); await nextTask(); h.raw.resolve("fixture result"); await h.controller.settled();
+  assert.equal(h.ui.getEditorText(), "existing fixture draft fixture result");
+});
+
+test("native source-dialog Escape cancels only the choice and restores typing focus", async () => {
+  const { h, store, original, disk } = await sourceHarness({ streaming: true });
+  h.ui.setEditorText("fixture draft"); await h.command(""); await nextTask();
+  const choosing = h.command("source"); await nextTask(); h.terminal.send("\x1b"); await choosing;
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.signals[0]!.aborted, false);
+  assert.equal((await store.load()).recorder.source, null); assert.deepEqual(await disk(), original);
+  h.terminal.send(" continues"); assert.equal(h.ui.getEditorText(), "fixture draft continues");
+  await h.command("cancel"); await h.controller.settled();
+});
+
+test("shutdown closes native source dialog without saving or leaking old choices into restarted scope", async () => {
+  const { h, store, original, disk } = await sourceHarness();
+  h.ui.setEditorText("fixture draft");
+  const choosing = h.command("source"); await nextTask(); h.terminal.send("unfinished-fixture-choice");
+  await h.emit("session_shutdown", { reason: "reload" }); await choosing;
+  assert.equal(h.mode.extensionInput, undefined);
+  assert.equal(h.ui.getEditorText(), "fixture draft");
+  assert.equal((await store.load()).recorder.source, null); assert.deepEqual(await disk(), original);
+  await h.start(); await h.command(""); await nextTask();
+  assert.equal(h.settings[0]!.recorder.source, null);
+});
+
+test("explicit settings reload updates the next operation, not active transcription routing", async () => {
+  const { h, store, original } = await sourceHarness();
+  await h.command(""); await nextTask();
+  await writeFile(store.path, JSON.stringify({ ...original, transcription: {
+    ...original.transcription, endpoint: "http://127.0.0.1:9001/v1/audio/transcriptions",
+  } }));
+  await h.command("reload"); await h.command(""); await nextTask();
+  assert.equal(h.settings[0]!.transcription.endpoint, original.transcription.endpoint);
+  assert.equal(h.settings[1]!.transcription.endpoint, original.transcription.endpoint);
+  h.raw.resolve("fixture"); await h.controller.settled();
+  await h.command(""); await nextTask();
+  assert.equal(h.settings.at(-1)!.transcription.endpoint, "http://127.0.0.1:9001/v1/audio/transcriptions");
+});
+
+test("processing feedback refreshes the current theme, not cached phase ANSI colors", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const h = harness(); await h.start(); await h.command(""); await nextTask(); await h.command(""); await nextTask();
+  assert.equal(h.controller.phase, "transcribing");
+  const before = h.statuses.get(STATUS_KEY);
+  initTheme("light", false);
+  const expected = h.ui.theme.fg("muted", "Transcribing…"); assert.notEqual(before, expected);
+  t.mock.timers.tick(1000);
+  assert.equal(h.statuses.get(STATUS_KEY), expected); assert.deepEqual(h.widgets.get(WIDGET_KEY), [expected]);
+});
+
+for (const fullscreen of [false, true]) for (const width of [12, 20, 80]) for (const replacement of [false, true]) {
+  test(`native feedback rendering ${fullscreen ? "fullscreen" : "regular"}/${width}/${replacement ? "replacement" : "stock"} footer`, async () => {
+    const h = harness({ fullscreen, nativeFeedback: true }); h.terminal.columns = width;
+    const custom = { render: () => ["OTHER"], invalidate: () => {} };
+    if (replacement) h.ui.setFooter(() => custom);
+    await h.start(); await h.command(""); await nextTask();
+    const widget = h.mode.widgetContainerAbove.render(width);
+    const footer = h.mode.footerContainer.render(width);
+    const plain = (lines: string[]) => lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    assert.match(plain(widget), /REC/); assert.match(plain(widget), /00:00/);
+    assert.ok([...widget, ...footer].every((line) => visibleWidth(line) <= width));
+    if (replacement) {
+      assert.equal(h.mode.customFooter, custom); assert.equal(plain(footer), "OTHER");
+    } else assert.match(plain(footer), /REC/);
+    await h.command("cancel"); await h.controller.settled();
+    assert.equal(h.footerStatuses.has(STATUS_KEY), false);
+    assert.equal(plain(h.mode.widgetContainerAbove.render(width)).trim(), "");
+    if (replacement) assert.equal(h.mode.customFooter, custom);
+  });
+}
+
+test("delivery during native source dialog preserves its focus and appends only to main draft", async () => {
+  const { h, store } = await sourceHarness();
+  h.ui.setEditorText("fixture draft");
+  await h.command(""); await nextTask(); await h.command(""); await nextTask();
+  const choosing = h.command("source"); await nextTask();
+  const dialog = h.mode.extensionInput; assert.ok(dialog);
+  h.raw.resolve("fixture result"); await h.controller.settled(); await nextTask();
+  assert.equal(h.mode.extensionInput, dialog);
+  assert.equal(h.ui.getEditorText(), "fixture draft fixture result");
+  h.terminal.send("fixture-dialog-choice"); h.terminal.send("\r"); await choosing;
+  assert.equal((await store.load()).recorder.source, "fixture-dialog-choice");
+  assert.equal(h.ui.getEditorText(), "fixture draft fixture result"); assert.equal(h.promptCalls.length, 0);
+});
+
+test("editor takeover after delivery during held cleanup emits no false discard notice", async () => {
+  const h = harness(); await h.start();
+  const cleanup = deferred<void>(); h.holdCleanup(cleanup.promise);
+  await h.command(""); await nextTask(); await h.command(""); await nextTask();
+  h.raw.resolve("already delivered fixture"); await nextTask();
+  assert.equal(h.ui.getEditorText(), "already delivered fixture"); assert.equal(h.controller.phase, "cleaning");
+  h.ui.setEditorComponent(() => h.mode.defaultEditor);
+  cleanup.resolve(); await h.controller.settled(); await nextTask();
+  assert.equal(h.notices.some((text) => text.includes("editor changed")), false);
 });

@@ -112,9 +112,11 @@ Tests currently run on Node **26.10.0** with pinned Pi **0.99.2** fixtures. Pi m
 are host-provided peers, not bundled runtime dependencies. The package remains
 private; no npm publication or v1 release is implied.
 
-[DEVELOPMENT.md](DEVELOPMENT.md) separates automated/API evidence from live checks
-and remaining acceptance work. A playback-monitor/local Whisper check succeeded;
-that is **not microphone validation**.
+[DEVELOPMENT.md](DEVELOPMENT.md) separates automated/API evidence from live checks.
+One owner-confirmed local dictation/draft/manual-submit check passed, with intact
+first/last words and correction disabled. Earlier playback-monitor diagnostics are
+**not microphone validation**. Use the [live checklist](docs/validation.md) for
+broader acceptance without retaining private test content.
 
 ## License and attribution
 

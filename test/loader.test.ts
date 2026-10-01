@@ -13,6 +13,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setImmediate as nextTask } from "node:timers/promises";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -50,9 +51,16 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     assert.ok(notices.some((text) => text.includes("pi-oaistt ready")));
     assert.ok(notices.some((text) => text.includes("F8 or /oaistt")));
     assert.ok(notices.some((text) => text.includes("Config: ready")));
+    native.ui.setEditorText("synthetic retained draft");
+    const choosing = command.handler("source", runner.createCommandContext());
+    await nextTask(); native.terminal.send("unfinished synthetic choice");
     await runner.emit({ type: "session_shutdown", reason: "reload" });
     assert.equal(native.ui.getEditorComponent(), undefined);
     runner.invalidate();
+    await choosing; // Old command must finish without touching invalid context.
+    assert.equal(native.mode.extensionInput, undefined);
+    assert.equal(native.ui.getEditorText(), "synthetic retained draft");
+    assert.equal(notices.some((text) => text.includes("source changed")), false);
   } finally {
     native.stop();
     if (savedDir === undefined) delete process.env.PI_CODING_AGENT_DIR;

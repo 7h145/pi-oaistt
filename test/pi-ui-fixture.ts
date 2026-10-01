@@ -14,16 +14,19 @@
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CustomEditor, InteractiveMode, initTheme, createSyntheticSourceInfo,
-  type ExtensionUIContext, type KeybindingsManager as PiKeybindings } from "@earendil-works/pi-coding-agent";
-import type { EditorTheme, Terminal, TUI, KeybindingsConfig } from "@earendil-works/pi-tui";
+import { CustomEditor, InteractiveMode, SessionManager, initTheme, createSyntheticSourceInfo,
+  type AgentSession, type ReadonlyFooterDataProvider, type ExtensionUIContext, type KeybindingsManager as PiKeybindings } from "@earendil-works/pi-coding-agent";
+import type { Component, EditorTheme, Terminal, TUI, KeybindingsConfig } from "@earendil-works/pi-tui";
 
 // Pi's shrinkwrapped npm dependency tree can contain two physical TUI copies.
 // Mimic the host's extension mapping: use the TUI resolved from Pi itself.
 const hostRequire = createRequire(import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { Container, Input, TuiAltScreen, TuiMainScreen, setKeybindings } =
   await import(pathToFileURL(hostRequire.resolve("@earendil-works/pi-tui")).href) as typeof import("@earendil-works/pi-tui");
-// Test-only access to native host keybindings (not value-exported by Pi).
+// Test-only access to the native footer and host keybindings.
+const { FooterComponent } = await import(pathToFileURL(join(
+  dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "modes/interactive/components/footer.js",
+)).href) as { FooterComponent: new (session: AgentSession, data: ReadonlyFooterDataProvider) => Component };
 const { KeybindingsManager } = await import(pathToFileURL(join(
   dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "core/keybindings.js",
 )).href) as { KeybindingsManager: new (config?: KeybindingsConfig) => PiKeybindings };
@@ -65,6 +68,9 @@ interface NativeSession {
   isStreaming: boolean;
   isCompacting: boolean;
   isBashRunning: boolean;
+  sessionManager: SessionManager;
+  state: { model: undefined };
+  getContextUsage(): undefined;
   extensionRunner: { getCommand(name: string): object | undefined };
   prompt(text: string, options?: { streamingBehavior?: string }): Promise<void>;
 }
@@ -82,6 +88,9 @@ interface NativeModeFixture {
   keybindings: PiKeybindings;
   editorContainer: InstanceType<typeof Container>;
   statusContainer: InstanceType<typeof Container>;
+  widgetContainerAbove: InstanceType<typeof Container>;
+  widgetContainerBelow: InstanceType<typeof Container>;
+  footerContainer: InstanceType<typeof Container>;
   editorComponentFactory?: unknown;
   pendingUserInputs: string[];
   compactionQueuedMessages: { text: string; mode: string }[];
@@ -116,6 +125,8 @@ export function createPiUI(options: {
     isStreaming: options.streaming ?? false,
     isCompacting: options.compacting ?? false,
     isBashRunning: false,
+    sessionManager: SessionManager.inMemory("/synthetic"), state: { model: undefined },
+    getContextUsage: () => undefined,
     extensionRunner: { getCommand: (name) => commands.has(name) ? {} : undefined },
     prompt: options.prompt ?? (async (text, opts) => {
       promptCalls.push({ text, behavior: opts?.streamingBehavior });
@@ -126,6 +137,21 @@ export function createPiUI(options: {
   mode.keybindings = keybindings;
   mode.editorContainer = new Container();
   mode.statusContainer = new Container();
+  mode.widgetContainerAbove = new Container();
+  mode.widgetContainerBelow = new Container();
+  mode.extensionWidgetsAbove = new Map(); mode.extensionWidgetsBelow = new Map();
+  const footerStatuses = new Map<string, string>();
+  const footerData = {
+    getGitBranch: () => null, getExtensionStatuses: () => footerStatuses,
+    getAvailableProviderCount: () => 0, onBranchChange: () => () => {},
+    setExtensionStatus: (key: string, value: string | undefined) => {
+      if (value === undefined) footerStatuses.delete(key); else footerStatuses.set(key, value);
+    },
+  };
+  mode.footerDataProvider = footerData;
+  mode.footer = new FooterComponent(session as unknown as AgentSession, footerData);
+  mode.footerContainer = new Container();
+  mode.footerContainer.addChild(mode.footer as InstanceType<typeof FooterComponent>);
   mode.defaultEditor = new CustomEditor(tui, editorTheme, keybindings);
   mode.editor = mode.defaultEditor;
   mode.pendingUserInputs = [];
@@ -139,12 +165,15 @@ export function createPiUI(options: {
     followUps.push(mode.handleFollowUp());
   });
   mode.editorContainer.addChild(mode.editor);
+  tui.addChild(mode.widgetContainerAbove);
   tui.addChild(mode.editorContainer);
+  tui.addChild(mode.widgetContainerBelow);
+  tui.addChild(mode.footerContainer);
   tui.setFocus(mode.editor);
   tui.start();
   const ui = mode.createExtensionUIContext();
   return {
-    terminal, tui, mode, ui, session, promptCalls, commands, followUps,
+    terminal, tui, mode, ui, session, promptCalls, commands, followUps, footerStatuses,
     isIdle: () => !session.isStreaming && !session.isCompacting,
     pi: {
       getCommands: () => [...commands].map((name) => ({
