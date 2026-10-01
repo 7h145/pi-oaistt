@@ -85,11 +85,39 @@ resolves the TUI **from Pi's own module root**, as Pi maps extension imports. Th
 fixture also uses native host keybindings. Never interpret a split-registry test
 as proof of actual Pi behavior.
 
+## Configuration and owned-operation controller
+
+The tested schema/defaults/credential references and source-save behavior are in
+[configuration.md](docs/configuration.md). Missing correction candidates remain
+an empty list; invalid settings never silently reroute. Temporary source overrides
+stay in memory; explicit source saves preserve other live config fields and use
+private atomic writes. No config is created merely by loading defaults.
+
+The controller allocates one operation synchronously and starts lifetime work in
+a separate task. It owns an abort controller and delivery lease, freezes settings,
+and retains recorder ownership until disposal succeeds. `starting` is a separate
+phase before recorder readiness, so later adapters need not falsely show REC while
+probing/connecting. A toggle in starting/recording requests stop; during processing
+it reports phase without starting another operation. Cancellation invalidates
+immediately, emits one fixed notice, and never waits for/aborts the main agent.
+
+Bounded stages settle even when a provider ignores abort. Correction error/empty
+result/total timeout yields raw text plus one notice; user cancellation yields no
+raw or corrected text. Disabled correction makes no correction request. Stale
+callbacks cannot affect a later operation. Phase status is cleared before teardown;
+failed disposal retains ownership and blocks another recorder rather than hiding
+an orphan. Adapter disposal itself must be idempotent and bounded.
+
+Total suite: **102 passing tests** plus typecheck. Controller tests use deterministic
+recorder/provider fakes, held cleanup and mock deadlines; they exercise cancellation,
+submission and session-discard reasons in starting, recording, stopping,
+transcribing and correcting. Production Pi lifecycle wiring and presentation are
+still pending; fake pipeline success is not a live microphone/provider claim.
+
 ## Next implementation work / unvalidated acceptance
 
-- Config schema/defaults/credential resolution and operation settings snapshots.
-- Responsive single-operation controller, lifecycle invalidation, status/notices,
-  cancellation, cleanup and adversarial late-completion tests in every phase.
+- Recorder/provider and Pi command/lifecycle adapters, including pre-start auth
+  validation and real status/notices/timer cleanup.
 - Private recorder, graceful stop/escalation/reaping, WAV validation and capture
   completeness. Historical 7-second/6-second pathfinder observation is unresolved.
 - Compatible bounded multipart transcription with redacted failures.

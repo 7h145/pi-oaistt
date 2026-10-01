@@ -1,0 +1,141 @@
+import assert from "node:assert/strict";
+import { afterEach, test } from "node:test";
+import { mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ConfigError, ConfigStore, configSnapshot, parseConfig, transcriptionKey } from "../src/config.ts";
+
+const dirs: string[] = [];
+afterEach(async () => { await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
+async function store() {
+  const dir = await mkdtemp(join(tmpdir(), "oaistt-config-test-"));
+  dirs.push(dir);
+  return { dir, store: new ConfigStore(dir) };
+}
+
+test("missing settings use documented defaults, no implicit correction model", () => {
+  const config = parseConfig({});
+  assert.equal(config.recorder.backend, "parecord");
+  assert.equal(config.recorder.source, null);
+  assert.equal(config.recorder.maxDurationSeconds, 300);
+  assert.equal(config.transcription.endpoint, "https://api.openai.com/v1/audio/transcriptions");
+  assert.equal(config.transcription.model, "whisper-1");
+  assert.equal(config.transcription.apiKeyEnv, "OPENAI_API_KEY");
+  assert.equal(config.correction.enabled, true);
+  assert.deepEqual(config.correction.models, []);
+  assert.equal(config.correction.context.maxChars, 8000);
+});
+
+test("snapshot is independent and deeply frozen", () => {
+  const config = parseConfig({ correction: { models: ["local/model", "remote/model"] } });
+  const snapshot = configSnapshot(config);
+  config.correction.models.reverse();
+  config.recorder.source = "later-source";
+  assert.deepEqual(snapshot.correction.models, ["local/model", "remote/model"]);
+  assert.equal(snapshot.recorder.source, null);
+  assert.throws(() => snapshot.correction.models.push("unlisted/model"), TypeError);
+  assert.throws(() => { snapshot.correction.context.maxChars = 0; }, TypeError);
+});
+
+test("explicit compatible/local endpoint, null auth and disabled context/correction", () => {
+  const config = parseConfig({ transcription: {
+    endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", apiKeyEnv: null, model: "local-stt", language: "de",
+  }, correction: { enabled: false, context: { maxChars: 0 } } });
+  assert.equal(transcriptionKey(config, {}), undefined);
+  assert.equal(config.correction.context.maxChars, 0);
+  assert.equal(config.correction.enabled, false);
+  assert.equal(config.transcription.model, "local-stt");
+});
+
+for (const value of [
+  null, [], { extra: true }, { recorder: null }, { transcription: [] },
+  { recorder: { backend: "auto" } }, { recorder: { source: "bad\nsource" } },
+  { recorder: { maxDurationSeconds: 0 } }, { recorder: { stopTimeoutSeconds: 1.5 } },
+  { recorder: { maxBytes: Number.MAX_SAFE_INTEGER } },
+  { transcription: { endpoint: "not-a-url" } },
+  { transcription: { endpoint: "https://synthetic:secret@example.invalid/stt" } },
+  { transcription: { endpoint: "https://example.invalid/stt?key=synthetic" } },
+  { transcription: { endpoint: "file:///synthetic" } },
+  { transcription: { model: "" } }, { transcription: { language: "" } },
+  { transcription: { apiKeyEnv: "!synthetic-command" } },
+  { transcription: { timeoutSeconds: null } },
+  { correction: { enabled: "false" } }, { correction: { models: ["$current"] } },
+  { correction: { models: ["provider/"] } }, { correction: { models: [12] } },
+  { correction: { context: { maxChars: -1 } } }, { correction: { context: { maxChars: 1.5 } } },
+  { correction: { context: { unknown: 2 } } }, { correction: { timeout: 30 } },
+]) {
+  test(`invalid configuration rejects, never silently reroutes: ${JSON.stringify(value)}`, () => {
+    assert.throws(() => parseConfig(value), ConfigError);
+  });
+}
+
+test("credential resolution uses only selected env and does not echo values", () => {
+  const config = parseConfig({ transcription: { apiKeyEnv: "FIXTURE_STT_KEY" } });
+  assert.equal(transcriptionKey(config, { FIXTURE_STT_KEY: "synthetic-test-value" }), "synthetic-test-value");
+  assert.throws(() => transcriptionKey(config, { OPENAI_API_KEY: "unselected-synthetic" }), /credential unavailable/);
+  assert.throws(() => transcriptionKey(config, { FIXTURE_STT_KEY: "synthetic\nvalue" }), (error: unknown) =>
+    error instanceof ConfigError && !error.message.includes("synthetic"));
+});
+
+test("temporary source adjustment never writes, explicit save changes source only", async () => {
+  const { dir, store: config } = await store();
+  const original = { transcription: { model: "explicit-fixture-model" }, correction: { enabled: false } };
+  await writeFile(config.path, JSON.stringify(original));
+  const first = await config.load();
+  config.setSource("fixture-input");
+  assert.equal((await config.load()).recorder.source, "fixture-input");
+  assert.equal(first.recorder.source, null);
+  assert.deepEqual(JSON.parse(await readFile(config.path, "utf8")), original);
+  await config.saveSource();
+  assert.deepEqual(JSON.parse(await readFile(config.path, "utf8")), { ...original, recorder: { source: "fixture-input" } });
+  assert.equal((await stat(config.path)).mode & 0o077, 0);
+  assert.deepEqual(await readdir(dir), ["pi-oaistt.json"]);
+  config.setSource(null);
+  await config.saveSource();
+  assert.equal((await new ConfigStore(dir).load()).recorder.source, null);
+});
+
+test("missing file/list creates no config until explicit source save", async () => {
+  const { dir, store: config } = await store();
+  assert.deepEqual((await config.load()).correction.models, []);
+  assert.deepEqual(await readdir(dir), []);
+  await assert.rejects(config.saveSource(), /No temporary source/);
+  config.setSource("fixture-input");
+  await config.saveSource();
+  assert.deepEqual(JSON.parse(await readFile(config.path, "utf8")), { recorder: { source: "fixture-input" } });
+});
+
+test("live edits to other fields are preserved on save", async () => {
+  const { store: config } = await store();
+  await config.load();
+  config.setSource("fixture-input");
+  await writeFile(config.path, JSON.stringify({ correction: { models: ["fixture/new-model"] } }));
+  await config.saveSource();
+  assert.deepEqual((await config.load()).correction.models, ["fixture/new-model"]);
+});
+
+test("invalid JSON or field fails without source saving or secret disclosure", async () => {
+  const { dir, store: config } = await store();
+  const invalid = "invalid-synthetic-secret-json";
+  await writeFile(config.path, invalid);
+  config.setSource("fixture-input");
+  await assert.rejects(config.load(), (error: unknown) =>
+    error instanceof ConfigError && !error.message.includes(invalid));
+  await assert.rejects(config.saveSource(), ConfigError);
+  assert.equal(await readFile(config.path, "utf8"), invalid);
+  assert.deepEqual(await readdir(dir), ["pi-oaistt.json"]);
+});
+
+test("symlinked and oversized configs rejected without modifying targets", async () => {
+  const { dir, store: config } = await store();
+  const target = join(dir, "target.json");
+  await writeFile(target, "{}");
+  await symlink(target, config.path);
+  await assert.rejects(config.load(), ConfigError);
+  config.setSource("fixture-input");
+  await assert.rejects(config.saveSource(), ConfigError);
+  assert.equal(await readFile(target, "utf8"), "{}");
+  await rm(config.path);
+  await writeFile(config.path, " ".repeat(65537));
+  await assert.rejects(config.load(), ConfigError);
+});
