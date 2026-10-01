@@ -1,9 +1,12 @@
-# Configuration schema (implementation baseline)
+# Configuration reference
 
-The config layer reads `pi-oaistt.json` in Pi's configured agent directory.
-The eventual extension entry point supplies Pi's `getAgentDir()` value; do not
-add a project-level config or hard-code a home path. Command/recorder/provider
-integration is still in progress; the following schema is implemented and tested.
+**The extension is still being built.** This reference describes the implemented
+settings and audio/transcription adapters, not a working installation procedure.
+Pi command and lifecycle integration are pending.
+
+Settings belong in `pi-oaistt.json` under Pi's configured agent directory. There is
+no project-level config layer. Reading defaults does not create a file; changing
+an in-session source will stay temporary unless you explicitly save it.
 
 Missing files/fields use these defaults. Invalid JSON, unknown fields, wrong
 types and out-of-range values fail closed; invalid endpoints/models never fall
@@ -44,8 +47,30 @@ Debian-family systems; provisioning/capture validation remain separate work.
 is passed only to the recorder, never set as the host default.
 
 Bounds: duration 1–1800 seconds; file bytes 1024–25165824 (24 MiB); graceful-stop
-budget 1–15 seconds. Overlong recording/forced-stop policy will be documented
-with the actual recorder adapter. No recorder is currently exposed by the package.
+budget 1–15 seconds. At the duration cap, request ordinary graceful stop and
+transcription. If the cap arrives before readiness, discard instead. Exceeding the
+size cap, a forced-stop timeout or failed WAV finalization always discards; forced
+termination never silently uploads even a parseable file. Final PCM duration must
+also fit duration plus stop budget. Private files/directories are removed after
+completion/cancellation. Capture defaults to mono PCM16/16 kHz WAV. Reject exact
+digital silence, not quiet speech by a volume threshold.
+
+The recorder requests 100 ms latency and 20 ms processing per stream to reduce
+buffered-audio loss on stop. These are requests, not guarantees for every device or
+server, and do not change host defaults or volume. Recording readiness requires
+audio bytes to reach the file, not merely a spawned process. Real microphone tests
+still need to check the first and last words; see [test evidence](../DEVELOPMENT.md).
+Muted/missing sources and playback monitors fail preflight. A monitor is not a mic;
+owner-authorized monitor experiments are separate diagnostics, not a production
+fallback. `PULSE_SOURCE`, when set, is an explicit routing override; otherwise the
+host default is resolved at each capture, never pinned at container startup.
+
+Boxed setups must already have host-approved audio access and container recorder
+tools. Exposing a Pulse/PipeWire-Pulse socket can grant **broad host audio access
+and control**, not microphone-only permission; a read-only filesystem bind does
+not make its protocol read-only. This extension does not mount sockets, start host
+services or alter routing/default/mute/volume state. No recorder is exposed as a Pi
+command yet.
 
 ## Transcription
 
@@ -58,11 +83,16 @@ The configured variable must exist and be nonempty; missing auth does not select
 a different variable/provider. No literal key, shell command, implicit Pi chat
 credential or OAuth substitution. `apiKeyEnv: null` means no Authorization header,
 for an intentionally unauthenticated compatible local service. Request timeout:
-1–600 seconds. Provider errors must not echo response bodies or credentials.
+1–600 seconds. Provider errors do not echo response bodies or credentials.
+Automatic HTTP redirects are refused to avoid sending audio to another URL. WAV
+size/duration/PCM validation is repeated before upload. Responses are bounded to
+256 KiB and 64000 transcript Unicode code points; only nonempty JSON `text` is
+supported. Filename metadata is a fixed `dictation.wav`, never the private path.
 
 `language: null` leaves language unspecified; a supplied language is a 2–3-letter
-code with optional subtags. `model` is a nonempty explicit string. Actual local
-and remote multipart compatibility still needs integration validation.
+code with optional subtags. `model` is a nonempty explicit string. A synthetic loopback HTTP server and one live owner-provided local Whisper route
+returned compatible multipart/JSON responses. Other local/remote services and
+provider authentication still need integration validation.
 
 ## Correction and provider boundaries
 
@@ -87,14 +117,14 @@ Pi models; use `context.maxChars: 0` to omit conversation history. Cancellation
 cannot recall information already sent to a provider; provider retention policies
 still apply. No per-turn privacy warning is planned.
 
-## Source overrides and persistence
+## Source changes and saving
 
-The config store supports a temporary source override (`null` restores default
-routing). Loading/switching the override does not write anything. Only explicit
-source-save writes `pi-oaistt.json`, preserving other live on-disk settings.
-Writes use a private temporary file and atomic rename, detect intervening config
-edits, reject invalid/symlinked targets and remove temporary files. Command syntax
-and user-facing controls will be documented when the entry point is implemented.
+A source override is temporary; `null` restores default routing. Loading settings
+or changing that override does not write a config file. Explicit source-save writes
+only the source change and preserves other on-disk settings. Invalid settings or
+an intervening file edit fail the save rather than overwriting them. Writes replace
+the config atomically through a private temporary file.
 
-Every operation receives an independent, deeply frozen effective-config snapshot;
-later source/config changes cannot reroute it. No examples contain credentials.
+Each dictation uses the settings it started with. Changing the source or config
+cannot reroute an operation already in progress. User-facing source commands will
+be documented when they are implemented.

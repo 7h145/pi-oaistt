@@ -114,13 +114,58 @@ submission and session-discard reasons in starting, recording, stopping,
 transcribing and correcting. Production Pi lifecycle wiring and presentation are
 still pending; fake pipeline success is not a live microphone/provider claim.
 
+## Recorder and compatible transcription adapter
+
+Implemented one deliberate Linux backend: parecord/Pulse (including PipeWire-Pulse).
+Resolve the default source per capture, or apply only the explicit config/env source
+as an argv option; preflight missing/muted/monitor sources without changing host
+routing. Own the startup handle before readiness, require first private-file audio
+bytes before REC, and use private mode-0700/0600 storage. Cap recording duration/size;
+SIGINT finalization must exit and validate before upload. Graceful-stop timeout
+escalates TERM/KILL, reaps only the owned detached group and refuses upload even if
+the forced-stop artifact parses. Disposal is idempotent and includes unfinished
+startup. Exact digital silence fails separately from structural WAV validity;
+quiet nonzero PCM is accepted. Final PCM duration is checked against the capture
+plus graceful-stop budget, including a second check before upload.
+
+Transcription uses bounded multipart WAV/model/language/JSON requests, explicit
+optional bearer auth, no automatic redirects, a constant upload filename and bounded
+UTF-8 JSON response decoding. Errors never echo provider bodies. Both operation and
+HTTP layers enforce owned cancellation/deadlines, even with uncooperative fetch.
+
+Total suite: **131 passing tests** plus typecheck. Added real detached Node child
+fixtures emitting ONLY synthetic PCM to test graceful finalization, invalid/silent
+WAV, oversized files, spawn/stop failure, kill/reap, routing and cancellation. A
+real loopback HTTP server verifies multipart fields/auth/PCM and nonempty JSON;
+negative response/cancellation tests are synthetic. No hardware/provider tests run
+as part of the automated suite.
+
+### Owner-authorized live playback-monitor experiment
+
+The owner offered running playback as a simulated microphone and a loopback Whisper
+server. Consumed the existing host-provided Pulse route and installed container-only
+`pulseaudio-utils`; no host defaults, mute, volume or exposure were changed. Manual
+capture targeted the default **sink's playback monitor**, NOT a microphone. Private
+audio was removed after each request; no transcript/audio/provider body was logged
+or added to fixtures/commits. Only timing/format/nonempty-response metadata remains.
+
+- Default parecord buffering: 6.006 s wall capture, first file audio at 2072 ms,
+  3 ms finalization, PCM16 mono 16 kHz WAV 4.000 s / 64000 frames. Compatible local
+  JSON `text` returned in 291 ms.
+- Per-stream `--latency-msec=100 --process-time-msec=20`: 6.024 s wall capture,
+  first file audio at 153 ms, 3 ms finalization, WAV 5.900 s / 94400 frames. Compatible
+  nonempty local JSON `text` returned in 319 ms. These flags now ship in the adapter.
+
+This exposes and substantially reduces a real trailing-buffer discrepancy; it does
+NOT establish microphone correctness, intelligibility, no clipped last phoneme,
+Bluetooth latency, exact wall/PCM equality or complete extension UX. Production
+still refuses playback monitors as mic sources. Actual microphone/terminal/provider
+matrix and speech-tail review remain release checks.
+
 ## Next implementation work / unvalidated acceptance
 
-- Recorder/provider and Pi command/lifecycle adapters, including pre-start auth
-  validation and real status/notices/timer cleanup.
-- Private recorder, graceful stop/escalation/reaping, WAV validation and capture
-  completeness. Historical 7-second/6-second pathfinder observation is unresolved.
-- Compatible bounded multipart transcription with redacted failures.
+- Pi command/lifecycle adapters, including pre-start auth validation and real
+  status/notices/timer cleanup.
 - Compaction-aware text/summaries context; isolated correction; explicit ordered
   candidates, owned cancellation and candidate/total deadlines.
 - F8/commands, source adjustment, explicit persistence, install/config/privacy
