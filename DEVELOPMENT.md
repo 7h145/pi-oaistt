@@ -221,10 +221,22 @@ review before release. The package is **0.1.0**, remains private, and has no rel
 tag. Pre-v1 compatibility is not promised; v1.0.0 is reserved for the first real
 product, not an implementation-scope label.
 
+## First owner-confirmed live dictation
+
+After explicit local-server configuration and container client provisioning, the
+owner confirmed the first live dictation worked as expected. Confirmation covered
+text remaining in the editor until manual submission and intact first/last spoken
+words. Correction was disabled for this check. No dictated text or audio is retained
+in these engineering notes or fixtures.
+
+This establishes one initial live transcription/draft-delivery success in the
+owner's current environment, not the broader hardware/provider/interaction matrix.
+
 ## Remaining unvalidated acceptance
 
-- Owner's live `/reload`, command/status/source-save/dialog interaction, real mic
-  recording and first/last spoken words; physical terminal/tmux F8 and collisions.
+- Broader live reload, command/status/source-save/dialog interaction, microphone
+  and speech-tail checks; physical terminal/tmux F8 variants and collisions. The
+  first basic dictation/draft/manual-submit check passed as reported above.
 - Live busy-agent/compaction/navigation/auth/reload behavior and semantic
   clipboard/image-provider preservation in a full interactive Pi session.
 - Stock/narrow/replacement footer and optional compositor visibility/layout.
