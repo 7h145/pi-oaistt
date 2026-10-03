@@ -25,11 +25,11 @@ test("strict schema separates identity, inherited/null tuning and candidate memb
   const value = raw();
   const c = parseConfig({ ...value, transcription: { ...value.transcription, defaults: { language: "en", attemptTimeoutSeconds: 1.25 },
     profiles: { ...value.transcription.profiles, remote: { ...value.transcription.profiles.remote, language: null } } },
-    correction: { order: ["$current", "p/m", "p/m"], defaults: { thinkingLevel: "low", attemptTimeoutSeconds: 2.5 }, modelSettings: { "p/m": { thinkingLevel: null } }, context: { maxChars: 0 }, enabled: false }, delivery: { dictationMarker: false } });
+    correction: { order: ["$current", "p/m", "p/m"], defaults: { thinkingLevel: "low", attemptTimeoutSeconds: 2.5 }, modelSettings: { "p/m": { thinkingLevel: null } }, context: { maxChars: 0 }, automatic: false }, delivery: { dictationMarker: false } });
   assert.equal(c.transcription.profiles.local!.language, "en"); assert.equal(c.transcription.profiles.remote!.language, null);
   assert.equal(c.transcription.profiles.third!.attemptTimeoutSeconds, 1.25);
   assert.equal(c.correction.modelSettings["p/m"]!.thinkingLevel, null); assert.equal(c.correction.modelSettings["p/m"]!.attemptTimeoutSeconds, 2.5);
-  assert.equal(c.correction.context.maxChars, 0); assert.equal(c.correction.enabled, false);
+  assert.equal(c.correction.context.maxChars, 0); assert.equal(c.correction.automatic, false);
   assert.equal(c.transcription.automaticFallback, false);
   const frozen = configSnapshot(c);
   assert.throws(() => { frozen.transcription.profiles.local!.auth.type = "env"; }, TypeError);

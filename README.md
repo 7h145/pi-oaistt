@@ -157,22 +157,49 @@ F7 works independently of automatic dictation correction. There is no
 
 ## Correction
 
-No correction models are configured by default. To use the current Pi
-model for manual correction, add this section to `pi-oaistt.json`:
+`correction.automatic` defaults to `true`, but it does not choose or authorize
+a model. The default `correction.order` is `[]`: no correction requests,
+raw dictation with an unavailable notice, and no useful F7 correction.
+Setting `automatic: false` delivers raw dictation without that notice; F7
+uses the configured order independently.
+
+**Recommended opt-in:** if you choose `openai-codex/gpt-6.1-luna`, merge
+this into your existing correction configuration, preserving unrelated
+settings:
+
+```json
+{
+  "correction": {
+    "automatic": true,
+    "order": ["openai-codex/gpt-6.1-luna"]
+  }
+}
+```
+
+This explicitly authorizes that model for automatic correction and F7.
+Use `automatic: false` for F7 only. It is an opinionated example, **not a
+built-in default or fallback**: the extension never inserts it into your
+order or appends it to another chain. Existing credentials, a subscription,
+or the Whisper transcription default do not opt you in. Pi must have the
+model registered and its credentials available; the recommendation is not
+live compatibility or quality evidence.
+
+Alternatively, to use the current Pi model for manual correction, merge
+this section into `pi-oaistt.json`:
 
 ```json
 {
   "correction": {
     "order": ["$current"],
-    "enabled": false,
+    "automatic": false,
     "context": { "maxChars": 8000 }
   }
 }
 ```
 
-Then run **`/oaistt reload`**. This example enables the F7 workflow but
-leaves automatic dictation correction off. Set `enabled` to `true` to
-also correct each transcription before insertion.
+Run **`/oaistt reload`** after either configuration change. The `$current`
+example enables F7 but leaves automatic dictation correction off. Set
+`automatic` to `true` to also correct each transcription before insertion.
 
 **Each attempted correction provider receives the target text and bounded
 conversation history.** For F7, the target is the entire **unsent draft**.
@@ -247,7 +274,7 @@ Timeouts and durations are in seconds; `maxBytes` is 24 MiB.
     "totalTimeoutSeconds": 120
   },
   "correction": {
-    "enabled": true,
+    "automatic": true,
     "order": [],
     "modelSettings": {},
     "defaults": {
@@ -274,7 +301,7 @@ Timeouts and durations are in seconds; `maxBytes` is 24 MiB.
 
 - `source: null` follows the audio server's recording default.
 - `language: null` omits the language field from transcription requests.
-- Although `correction.enabled` defaults to `true`, the empty `order`
+- Although `correction.automatic` defaults to `true`, the empty `order`
   means no correction requests are made until you choose models.
 - `thinkingLevel: null` means no correction-specific override, not a
   guarantee that the provider disables thinking.

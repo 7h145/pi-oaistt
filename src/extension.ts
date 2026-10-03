@@ -281,7 +281,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       `oaistt: ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. Config: ${config ? "ready" : "unavailable"}.`,
       `Active STT: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}.`,
       `Fallback: ${config?.transcription.automaticFallback ? "on" : "off"}. Next recorder: ${config?.recorder.source ? "configured override" : "server default"}.`,
-      `Correction: ${config?.correction.enabled ? "automatic on" : "automatic off"} (${config?.correction.order.length ?? 0} selectors).`,
+      `Correction: ${config?.correction.automatic ? "automatic on" : "automatic off"} (${config?.correction.order.length ?? 0} selectors).`,
       `Active keys: ${bindingsLabel(activeBindings)}.`,
     ];
     if (config && JSON.stringify(config.keybindings) !== JSON.stringify(registeredBindings)) lines.push(

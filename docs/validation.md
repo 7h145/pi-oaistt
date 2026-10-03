@@ -11,6 +11,8 @@ configuration. Do not enable raw provider/terminal tracing.
 ## Prepare deliberately
 
 - Migrate the private v0.1 file explicitly; inspect actual endpoint/model/auth intent.
+  Earlier v0.2 files need `correction.enabled` renamed to `correction.automatic`,
+  preserving the boolean; the old name is rejected, not migrated automatically.
   No file/transcription section means the built-in OpenAI profile.
 - Load code/keys with full Pi `/reload`, then inspect `/oaistt` help/status.
 - Confirm `pactl`/`parecord`, host-approved audio access and available unmuted microphone.
@@ -76,6 +78,13 @@ Editor instance/history may change; do not claim seamless cross-reload undo.
 Approve each ordered destination first. Test explicit `$current` plus literals,
 main identity change while recording, alias dedupe and named tuning outside order.
 No implicit/sticky correction model should appear.
+
+Test `correction.automatic` true/false with empty, configured and unavailable orders:
+empty order makes no requests even with credentials or a selected main model;
+automatic false gives raw speech without a correction-failure notice; F7 remains
+independent. The opt-in README recommendation must never appear without an explicit
+order entry or be appended to an existing chain. Choosing it is not live validation;
+test its registration/auth/capabilities and quality separately if you opt in.
 
 Check null/unset/off and approved supported levels on selected actual providers;
 verify mapped controls and quality using synthetic technical names, ambiguity and

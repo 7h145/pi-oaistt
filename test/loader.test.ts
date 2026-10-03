@@ -30,7 +30,7 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     const agentDir = join(dir, "agent");
     await mkdir(agentDir);
     // Entirely synthetic config; never load the user's actual agent config.
-    await writeFile(join(agentDir, "pi-oaistt.json"), JSON.stringify({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "none" } } } }, correction: { enabled: false } }));
+    await writeFile(join(agentDir, "pi-oaistt.json"), JSON.stringify({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "none" } } } }, correction: { automatic: false } }));
     process.env.PI_CODING_AGENT_DIR = agentDir;
     const extensions = join(dir, ".pi", "extensions"); await mkdir(extensions, { recursive: true });
     const product = resolve(fileURLToPath(new URL("..", import.meta.url)));

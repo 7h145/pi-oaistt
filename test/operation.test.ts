@@ -197,7 +197,7 @@ test("shutdown idempotently clears phase, with no cancellation notice", async ()
 });
 
 test("disabled correction inserts raw text without failure notice or request", async () => {
-  const h = harness(); h.config.correction.enabled = false;
+  const h = harness(); h.config.correction.automatic = false;
   await advance(h, "transcribing");
   h.transcription.resolve("raw fixture"); await h.controller.settled();
   assert.equal(h.text(), "typed draft raw fixture");
@@ -303,7 +303,7 @@ test("bounded helper distinguishes timeout/cancellation and checks ignored abort
 });
 
 test("submission after delivery during held cleanup does not report an unfinished-result discard", async () => {
-  const h = harness(); h.config.correction.enabled = false;
+  const h = harness(); h.config.correction.automatic = false;
   const cleanup = deferred<void>(); h.holdCleanup(cleanup.promise);
   await advance(h, "transcribing");
   h.transcription.resolve("already delivered fixture"); await nextTask();

@@ -41,7 +41,7 @@ Endpoints/model IDs below are placeholders, not compatibility evidence:
     "totalTimeoutSeconds": 120
   },
   "correction": {
-    "enabled": true,
+    "automatic": true,
     "order": ["$current", "YOUR_PROVIDER/YOUR_MODEL"],
     "modelSettings": {
       "YOUR_PROVIDER/YOUR_MODEL": { "thinkingLevel": "low" },
@@ -80,8 +80,8 @@ and zero where supported, not truthiness defaults.
 | `transcription.defaults.attemptTimeoutSeconds` | 60; profile override permitted |
 | `transcription.automaticFallback` | false |
 | `transcription.totalTimeoutSeconds` | 120; whole chain including preparation, not recording |
-| `correction.enabled` | true; automatic only, not explicit F7 |
-| `correction.order` | empty; at most 32 `provider/modelId` or `$current` selectors; model ID may contain slashes |
+| `correction.automatic` | true; automatic post-STT attempts only, never model authorization; F7 independent |
+| `correction.order` | `[]`; no candidates/requests by default; at most 32 `provider/modelId` or `$current` selectors; model ID may contain slashes |
 | `correction.modelSettings` | at most 32 actual named-model tuning entries; `$current` is not a key |
 | `correction.defaults.thinkingLevel` | null; named override permitted |
 | `correction.defaults.attemptTimeoutSeconds` | 15; named override permitted |
@@ -167,6 +167,20 @@ host state. Permission annotations are hints for the harness, not an authorizati
 sandbox. Metadata may initialize lazily in non-TUI modes without audio/editor access.
 
 ## Correction, thinking and privacy
+
+`automatic: true` attempts post-STT correction only through the explicitly
+configured order. Empty order means no requests and raw dictation under the
+ordinary exhaustion/notice policy. `automatic: false` gives raw dictation without
+a correction-failure notice. F7 uses the same order regardless of this flag.
+Actual correction needs a registered candidate, available Pi credentials and a
+successful request; the flag alone cannot authorize a model.
+
+The [README recommendation](../README.md#correction),
+`openai-codex/gpt-6.1-luna`, is opt-in configuration only. It is never a shipped
+candidate, hidden fallback or automatically appended entry. Neither credentials,
+a subscription nor the Whisper default grant correction consent. Registration,
+auth and capabilities still use normal request-time checks; no live compatibility
+or quality validation is claimed.
 
 Resolve only ordered selectors, restart at the beginning each operation, and dedupe
 actual registered provider/model identities at first position. `$current` freezes the
@@ -266,12 +280,31 @@ it. Implementation/upgrading is not permission to edit private settings automati
    `{"type":"none"}`. Do not copy placeholder endpoints blindly.
 2. Move `language` and old `timeoutSeconds` to section defaults/profile tuning using
    `attemptTimeoutSeconds`; set a separate whole-chain timeout if desired.
-3. Move correction `models` to `order`. Move `attemptTimeoutSeconds` to `defaults`;
+3. Rename `correction.enabled` to `correction.automatic`, preserving its boolean
+   value. The old name is rejected, not aliased—even if both names are present.
+   Move correction `models` to `order`. Move `attemptTimeoutSeconds` to `defaults`;
    put named overrides in `modelSettings`. Only add `$current` with intentional consent.
 4. Review recorder intent: default/null now follows the server, **not PULSE_SOURCE**.
    Put an intentional device override in `recorder.source` if needed.
 5. Keep automatic fallback/marker off unless deliberately opting in. Review default
    F7/F12 and any conflicts. Full `/reload` loads v0.2 code/keys; inspect help/status.
+
+Earlier v0.2 development configurations also used `correction.enabled`. If your
+file already uses order/maps, rename just that key, keeping its `true`/`false`
+value and all other settings. For example, the legacy
+`"correction": {"enabled": false, "order": ["YOUR_PROVIDER/YOUR_MODEL"]}` becomes:
+
+```json
+{
+  "correction": {
+    "automatic": false,
+    "order": ["YOUR_PROVIDER/YOUR_MODEL"]
+  }
+}
+```
+
+No automatic rewrite or legacy-format fallback occurs. The recommendation does
+not change your order; adopt it only if you deliberately choose that destination.
 
 Legacy fields are errors, not compatibility fallbacks. TTS, broader pi-lazy parity,
 glossary enrichment, direct streams and `/lazy` compatibility remain out of scope.

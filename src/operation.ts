@@ -207,7 +207,7 @@ export class OperationController {
         this.#check(op); this.#phase(op, "transcribing");
         const raw = await bounded(s => op.pipeline.transcribe(audio, op.config, s), op.abort.signal, op.config.transcription.totalTimeoutSeconds * 1000);
         this.#check(op); if (!raw.trim()) throw new DictationError("Transcription returned no text.");
-        const result = op.config.correction.enabled ? await this.#correction(op, raw) : { kind: "corrected" as const, text: raw };
+        const result = op.config.correction.automatic ? await this.#correction(op, raw) : { kind: "corrected" as const, text: raw };
         this.#check(op);
         if (result.kind === "thinking-error") op.owner.error?.(result.message);
         const delivered = op.lease.append(op.owner.ui, result.kind === "corrected" ? result.text : raw, () => this.#current(op), op.config.delivery.dictationMarker);

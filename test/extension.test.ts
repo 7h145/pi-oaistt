@@ -23,6 +23,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { fauxProvider, fauxAssistantMessage, type AssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { correct as realCorrect } from "../src/correction.ts";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -33,7 +35,7 @@ const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
 function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean;
-  store?: Dependencies["store"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
+  store?: Dependencies["store"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
     mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings, notifications: options.nativeNotifications });
   const notices: string[] = [];
@@ -58,7 +60,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   let command!: Omit<RegisteredCommand, "name" | "sourceInfo">;
   const shortcuts = new Map<string, { handler(ctx: ExtensionContext): void | Promise<void> }>();
   const tools = new Map<string, any>();
-  let config = parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "none" } } } }, correction: { enabled: false } });
+  let config = parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "none" } } } }, correction: { automatic: false } });
   const ready = deferred<void>(); ready.resolve();
   const raw = deferred<string>();
   const edited = deferred<import("../src/correction.ts").CorrectionOutcome>();
@@ -91,6 +93,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
     registerShortcut: (key: string, value: { handler(ctx: ExtensionContext): void }) => { shortcuts.set(key, value); },
     registerTool: (tool: any) => tools.set(tool.name, tool),
   } as unknown as ExtensionAPI;
+  const actualCorrection = options.correction;
   const result = registerDictation(pi, {
     store: options.store ?? { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {}, saveProfile: async () => {} },
     prepare: async () => new Uint8Array(), key: () => undefined, clock: () => clock,
@@ -99,7 +102,10 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
         dispose: () => { disposals++; return cleanup; } };
     },
     transcribe: async (audio, config, signal, key, fetcher, profile, bytes) => { signals.push(signal); settings.push(config); return options.attempt ? options.attempt(audio, config, signal, key, fetcher, profile, bytes) : raw.promise; },
-    correct: async (target, config, signal, _session, _registry, options) => { targets.push(target); correctionOptions.push(options); signals.push(signal); settings.push(config); return edited.promise; },
+    correct: async (target, config, signal, session, registry, options) => {
+      targets.push(target); correctionOptions.push(options); signals.push(signal); settings.push(config);
+      return actualCorrection ? actualCorrection(target, config, signal, session, registry, options) : edited.promise;
+    },
   });
   const emit = async (event: string, data: object = {}) => {
     for (const handler of events.get(event) ?? []) await handler({ type: event, ...data }, ctx);
@@ -187,7 +193,7 @@ for (const event of ["session_before_switch", "session_before_fork", "session_be
 }
 
 test("reload shutdown restores expanded editor, clears phase, cancels late correction and permits fresh operation", async () => {
-  const h = harness(); h.config.correction.enabled = true;
+  const h = harness(); h.config.correction.automatic = true;
   await h.start(); await h.command("dictation toggle"); await nextTask(); await h.command("dictation toggle"); await nextTask();
   h.raw.resolve("raw fixture"); await nextTask(); assert.equal(h.controller.phase, "correcting");
   h.ui.setEditorText("same draft");
@@ -268,7 +274,7 @@ async function sourceHarness(options: Parameters<typeof harness>[0] = {}) {
   const dir = await mkdtemp(join(tmpdir(), "oaistt-source-command-test-"));
   open.push(() => rm(dir, { recursive: true, force: true }));
   const store = new ConfigStore(dir);
-  const original = { recorder: { maxDurationSeconds: 12 }, transcription: { order: ["openai"], profiles: { openai: { endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", model: "fixture-stt", auth: { type: "none" } } } }, correction: { enabled: false } };
+  const original = { recorder: { maxDurationSeconds: 12 }, transcription: { order: ["openai"], profiles: { openai: { endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", model: "fixture-stt", auth: { type: "none" } } } }, correction: { automatic: false } };
   await writeFile(store.path, JSON.stringify(original));
   const h = harness({ ...options, store });
   await h.start();
@@ -417,14 +423,14 @@ test("manual and dictation cannot restart/retarget one another; bare root is rea
   h.f12(); await h.controller.settled(); h.f8(); await nextTask(); h.f7(); assert.equal(h.controller.kind, "dictation");
 });
 test("dictation marker is delivery-only and never appears in correction input", async () => {
-  const h = harness(); h.config.delivery.dictationMarker = true; h.config.correction.enabled = true;
+  const h = harness(); h.config.delivery.dictationMarker = true; h.config.correction.automatic = true;
   await h.start(); h.f8(); await nextTask(); h.f8(); await nextTask(); h.raw.resolve("raw synthetic"); await nextTask();
   assert.equal(h.targets[0], "raw synthetic"); h.edited.resolve({ kind: "exhausted" }); await h.controller.settled();
   assert.equal(h.ui.getEditorText(), "this is dictated\n\nraw synthetic");
   h.terminal.send("\x1f"); assert.equal(h.ui.getEditorText(), "");
 });
 test("explicit current identity is frozen at recording start, not main-model/correction time", async () => {
-  const h = harness(); h.config.correction.enabled = true; h.config.correction.order = ["$current"];
+  const h = harness(); h.config.correction.automatic = true; h.config.correction.order = ["$current"];
   h.setModel({ provider: "synthetic-a", id: "one" } as ExtensionContext["model"]);
   await h.start(); h.f8(); await nextTask(); h.setModel({ provider: "synthetic-b", id: "two" } as ExtensionContext["model"]);
   h.f8(); await nextTask(); h.raw.resolve("synthetic"); await nextTask();
@@ -456,7 +462,7 @@ function profilesConfig() {
   return parseConfig({ transcription: { order: ["local", "remote"], automaticFallback: true, profiles: {
     local: { endpoint: "http://127.0.0.1:1/local", model: "same-label", auth: { type: "none" } },
     remote: { endpoint: "http://127.0.0.1:1/remote", model: "same-label", auth: { type: "none" } },
-  } }, correction: { enabled: false } });
+  } }, correction: { automatic: false } });
 }
 for (const newer of ["none", "choice", "reselect", "reload", "cancel"] as const) test(`integrated held STT fallback success versus newer ${newer}`, async () => {
   const held = deferred<string>(); let attempts = 0;
@@ -479,7 +485,7 @@ test("legitimate STT sticky preference survives later correction cancellation", 
   const h = harness({ attempt: async (_a, _c, _s, _k, _f, p) => {
     if (p!.endpoint.endsWith("local")) throw new (await import("../src/transcription.ts")).TranscriptionFailure("network failure"); return "synthetic";
   } });
-  const c = profilesConfig(); c.correction.enabled = true; h.setConfig(c);
+  const c = profilesConfig(); c.correction.automatic = true; h.setConfig(c);
   await h.start(); h.f8(); await nextTask(); h.f8(); await nextTask();
   assert.equal(h.controller.phase, "correcting"); assert.equal(h.selection.selected, "remote");
   h.f12(); await h.controller.settled(); assert.equal(h.selection.selected, "remote"); assert.equal(h.ui.getEditorText(), "");
@@ -510,7 +516,7 @@ test("settings-only key changes stay pending, with old F8 continuing until full 
 });
 
 test("dictation thinking error is red plus guarded raw, not ordinary exhaustion notice", async () => {
-  const h = harness(); h.config.correction.enabled = true; await h.start();
+  const h = harness(); h.config.correction.automatic = true; await h.start();
   h.f8(); await nextTask(); h.f8(); await nextTask(); h.raw.resolve("raw synthetic"); await nextTask();
   h.edited.resolve({ kind: "thinking-error", message: "Synthetic local thinking error." }); await h.controller.settled();
   assert.equal(h.ui.getEditorText(), "raw synthetic"); assert.ok(h.categories.includes("error"));
@@ -607,3 +613,28 @@ test("status-only output omits command help; extra help/status arguments stay in
   }
   assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0);
 });
+
+for (const automatic of [true, false]) for (const state of ["empty", "configured", "unavailable"] as const)
+  for (const manual of [false, true]) test(`native F${manual ? 7 : 8}: automatic=${automatic}, ${state} order preserves delivery/notice policy`, async () => {
+    const h = harness({ correction: realCorrect });
+    const provider = fauxProvider({ provider: "fixture", models: [{ id: "correction" }] });
+    let requests = 0;
+    h.ctx.modelRegistry = {
+      find: (name: string, id: string) => name === "fixture" ? provider.getModel(id) : undefined,
+      streamSimple: () => { requests++; return { result: async () => fauxAssistantMessage("corrected synthetic") } as AssistantMessageEventStream; },
+    } as unknown as ModelRegistry;
+    h.config.correction.automatic = automatic;
+    h.config.correction.order = state === "empty" ? [] : [state === "configured" ? "fixture/correction" : "missing/model"];
+    h.setModel(provider.getModel("correction"));
+    await h.start(); await h.command("status");
+    assert.ok(h.notices.at(-1)!.includes(`Correction: automatic ${automatic ? "on" : "off"} (${h.config.correction.order.length} selectors).`));
+    h.ui.setEditorText(manual ? "raw synthetic" : "");
+    if (manual) h.f7();
+    else { h.f8(); await nextTask(); h.f8(); h.raw.resolve("raw synthetic"); }
+    await h.controller.settled();
+    const attempt = automatic || manual;
+    assert.equal(requests, attempt && state === "configured" ? 1 : 0);
+    assert.equal(h.ui.getEditorText(), attempt && state === "configured" ? "corrected synthetic" : "raw synthetic");
+    assert.equal(h.notices.filter(n => /Correction unavailable/.test(n)).length, attempt && state !== "configured" ? 1 : 0);
+    assert.equal(h.main.signal.aborted, false);
+  });

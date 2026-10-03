@@ -112,7 +112,7 @@ export async function correct(
     if (options.isCurrent && !options.isCurrent()) throw new DOMException("Correction ownership changed", "AbortError");
   };
   check(signal);
-  if (!config.correction.enabled && !options.manual) return { kind: "corrected", text: raw };
+  if (!config.correction.automatic && !options.manual) return { kind: "corrected", text: raw };
   if (!config.correction.order.length) return { kind: "exhausted" };
   const deadline = performance.now() + config.correction.totalTimeoutSeconds * 1000;
   const snapshot = correctionContext(session, config.correction.context.maxChars);

@@ -131,7 +131,7 @@ for (const invalid of [
 test("disabled/empty candidate list makes no context or provider calls; each dictation retries list", async () => {
   const h = registryFixture(["throw", fauxAssistantMessage("success"), fauxAssistantMessage("first candidate recovered")]);
   const source = { buildSessionProjection: () => { throw new Error("must not access history"); } };
-  const disabled = parseConfig({ correction: { enabled: false, order: ["fixture/one"] } });
+  const disabled = parseConfig({ correction: { automatic: false, order: ["fixture/one"] } });
   assert.deepEqual(await correct("raw fixture", disabled, new AbortController().signal, source, h.registry), { kind: "corrected", text: "raw fixture" });
   assert.deepEqual(await correct("raw fixture", parseConfig({}), new AbortController().signal, source, h.registry), { kind: "exhausted" });
   assert.equal(h.calls.length, 0);
@@ -240,7 +240,7 @@ test("unused later unsupported thinking cannot reject an earlier success; explic
 });
 test("explicit manual ignores automatic enablement and preserves target/output outer whitespace", async () => {
   const h = registryFixture([fauxAssistantMessage("  corrected @src/synthetic.ts\n/tmp/synthetic.png\n\n")]);
-  h.config.correction.enabled = false;
+  h.config.correction.automatic = false;
   const target = "  typo @src/synthetic.ts\n/tmp/synthetic.png\n\n";
   const result = await correct(target, h.config, new AbortController().signal, session(), h.registry, { manual: true });
   assert.deepEqual(result, { kind: "corrected", text: "  corrected @src/synthetic.ts\n/tmp/synthetic.png\n\n" });
@@ -260,4 +260,37 @@ test("editor ownership lost at failed completion prevents next correction before
   h.registry.streamSimple = () => { owned = false; return { result: async () => fauxAssistantMessage("", { stopReason: "error" }) } as AssistantMessageEventStream; };
   await assert.rejects(correct("raw", h.config, new AbortController().signal, session(), h.registry, { isCurrent: () => owned }));
   assert.deepEqual(h.lookups, ["fixture/one"]);
+});
+
+for (const automatic of [true, false]) for (const state of ["empty", "configured", "unavailable"] as const)
+  for (const manual of [false, true]) test(`automatic=${automatic}, ${state} order, manual=${manual}: only explicit order authorizes attempts`, async () => {
+    const h = registryFixture([fauxAssistantMessage("corrected synthetic")]);
+    const config = parseConfig({ correction: { automatic, order: state === "empty" ? [] : [state === "configured" ? "fixture/one" : "missing/model"] } });
+    const result = await correct("raw synthetic", config, new AbortController().signal, session(), h.registry,
+      { manual, current: { provider: "fixture", id: "one" } });
+    const attempts = automatic || manual;
+    assert.deepEqual(result, !attempts ? { kind: "corrected", text: "raw synthetic" }
+      : state === "configured" ? { kind: "corrected", text: "corrected synthetic" } : { kind: "exhausted" });
+    assert.equal(h.calls.length, attempts && state === "configured" ? 1 : 0);
+    assert.deepEqual(h.lookups, attempts && state !== "empty" ? config.correction.order : []);
+  });
+
+test("registered recommendation with usable auth/current identity never becomes an implicit candidate", async () => {
+  const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, refreshOnCreate: false });
+  const registry = new ModelRegistry(runtime);
+  const provider = fauxProvider({ provider: "openai-codex", models: [{ id: "gpt-6.1-luna" }] });
+  let authCalls = 0;
+  provider.provider.auth.apiKey = { name: "synthetic auth", resolve: async () => { authCalls++; return { auth: { apiKey: "SYNTHETIC_AUTH_ONLY" } }; } };
+  provider.setResponses([fauxAssistantMessage("explicit synthetic correction")]);
+  registry.registerProvider(provider.provider);
+  const noHistory = { buildSessionProjection: () => { throw new Error("empty order must not read history"); } };
+  const current = { provider: "openai-codex", id: "gpt-6.1-luna" };
+  for (const settings of [{}, { correction: {} }, { correction: { order: [], modelSettings: { "openai-codex/gpt-6.1-luna": {} } } }]) {
+    const config = parseConfig(settings);
+    for (const manual of [false, true]) assert.deepEqual(await correct("raw synthetic", config, new AbortController().signal, noHistory, registry, { manual, current }), { kind: "exhausted" });
+  }
+  assert.equal(authCalls, 0); assert.equal(provider.state.callCount, 0);
+  const chosen = parseConfig({ correction: { automatic: false, order: ["openai-codex/gpt-6.1-luna"], context: { maxChars: 0 } } });
+  assert.deepEqual(await correct("raw synthetic", chosen, new AbortController().signal, session(), registry, { manual: true }), { kind: "corrected", text: "explicit synthetic correction" });
+  assert.equal(provider.state.callCount, 1); assert.ok(authCalls > 0);
 });

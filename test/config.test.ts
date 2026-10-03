@@ -34,7 +34,7 @@ test("missing settings use documented defaults, no implicit correction model", (
   assert.equal(config.transcription.profiles.openai!.endpoint, "https://api.openai.com/v1/audio/transcriptions");
   assert.equal(config.transcription.profiles.openai!.model, "whisper-1");
   assert.deepEqual(config.transcription.profiles.openai!.auth, { type: "env", name: "OPENAI_API_KEY" });
-  assert.equal(config.correction.enabled, true);
+  assert.equal(config.correction.automatic, true);
   assert.deepEqual(config.correction.order, []);
   assert.equal(config.correction.context.maxChars, 8000);
 });
@@ -51,10 +51,10 @@ test("snapshot is independent and deeply frozen", () => {
 });
 
 test("explicit compatible/local endpoint, null auth and disabled context/correction", () => {
-  const config = parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", model: "local-stt", auth: { type: "none" }, language: "de" } } }, correction: { enabled: false, context: { maxChars: 0 } } });
+  const config = parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", model: "local-stt", auth: { type: "none" }, language: "de" } } }, correction: { automatic: false, context: { maxChars: 0 } } });
   assert.equal(transcriptionKey(config.transcription.profiles.openai!, {}), undefined);
   assert.equal(config.correction.context.maxChars, 0);
-  assert.equal(config.correction.enabled, false);
+  assert.equal(config.correction.automatic, false);
   assert.equal(config.transcription.profiles.openai!.model, "local-stt");
 });
 
@@ -70,7 +70,7 @@ for (const value of [
   { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "", auth: { type: "env", name: "OPENAI_API_KEY" } } } } }, { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" }, language: "" } } } },
   { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "!synthetic-command" } } } } },
   { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" }, attemptTimeoutSeconds: null } } } },
-  { correction: { enabled: "false" } }, { correction: { order: ["$unknown"] } },
+  { correction: { automatic: "false" } }, { correction: { order: ["$unknown"] } },
   { correction: { order: ["provider/"] } }, { correction: { order: [12] } },
   { correction: { context: { maxChars: -1 } } }, { correction: { context: { maxChars: 1.5 } } },
   { correction: { context: { unknown: 2 } } }, { correction: { timeout: 30 } },
@@ -90,7 +90,7 @@ test("credential resolution uses only selected env and does not echo values", ()
 
 test("temporary source adjustment never writes, explicit save changes source only", async () => {
   const { dir, store: config } = await store();
-  const original = { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "explicit-fixture-model", auth: { type: "env", name: "OPENAI_API_KEY" } } } }, correction: { enabled: false } };
+  const original = { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "explicit-fixture-model", auth: { type: "env", name: "OPENAI_API_KEY" } } } }, correction: { automatic: false } };
   await writeFile(config.path, JSON.stringify(original));
   const first = await config.load();
   config.setSource("fixture-input");
@@ -149,4 +149,40 @@ test("symlinked and oversized configs rejected without modifying targets", async
   await rm(config.path);
   await writeFile(config.path, " ".repeat(65537));
   await assert.rejects(config.load(), ConfigError);
+});
+
+for (const enabled of [true, false, "SYNTHETIC_SECRET", null]) test(`obsolete enabled field is rejected with a targeted migration hint (${typeof enabled})`, () => {
+  assert.throws(() => parseConfig({ correction: { enabled } }), (error: unknown) =>
+    error instanceof ConfigError && /correction\.enabled/.test(error.message) &&
+    /correction\.automatic/.test(error.message) && /preserv/i.test(error.message) && !error.message.includes("SYNTHETIC_SECRET"));
+});
+test("old and new flags together are rejected rather than using either", () => {
+  assert.throws(() => parseConfig({ correction: { enabled: true, automatic: false } }), /correction\.enabled/);
+});
+for (const value of [null, 0, "true", []]) test(`automatic requires a boolean (${JSON.stringify(value)})`, () => {
+  assert.throws(() => parseConfig({ correction: { automatic: value } }), /correction\.automatic/);
+});
+test("legacy configuration load/save fails without rewriting or activating any model", async () => {
+  const { dir, store: config } = await store();
+  const bytes = JSON.stringify({ correction: { enabled: false, order: ["fixture/one"] } });
+  await writeFile(config.path, bytes);
+  await assert.rejects(config.load(), /correction\.automatic/);
+  config.setSource("synthetic-input"); await assert.rejects(config.saveSource(), /correction\.automatic/);
+  assert.equal(await readFile(config.path, "utf8"), bytes);
+  assert.deepEqual(await readdir(dir), ["pi-oaistt.json"]);
+});
+
+test("documented JSON examples parse; defaults stay empty and recommendation requires explicit choice", async () => {
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+  const reference = await readFile(new URL("../docs/configuration.md", import.meta.url), "utf8");
+  const examples = [...readme.matchAll(/```json\n([\s\S]*?)\n```/g)].map(m => JSON.parse(m[1]!));
+  for (const text of [readme, reference]) for (const m of text.matchAll(/```json\n([\s\S]*?)\n```/g)) parseConfig(JSON.parse(m[1]!));
+  const defaults = readme.slice(readme.indexOf("### Full configuration and defaults")).match(/```json\n([\s\S]*?)\n```/)![1]!;
+  assert.deepEqual(parseConfig(JSON.parse(defaults)), parseConfig({}));
+  assert.equal(parseConfig({}).correction.automatic, true); assert.deepEqual(parseConfig({}).correction.order, []);
+  const recommendation = examples.find(e => e.correction?.order?.includes("openai-codex/gpt-6.1-luna"));
+  assert.ok(recommendation); assert.equal(parseConfig(recommendation).correction.automatic, true);
+  assert.deepEqual(parseConfig(recommendation).correction.order, ["openai-codex/gpt-6.1-luna"]);
+  const explicitOther = parseConfig({ correction: { order: ["fixture/one"], modelSettings: { "openai-codex/gpt-6.1-luna": {} } } });
+  assert.deepEqual(explicitOther.correction.order, ["fixture/one"]);
 });

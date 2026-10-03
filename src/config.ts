@@ -28,7 +28,7 @@ export interface Profile {
 export interface Config {
   recorder: { backend: "parecord"; source: string | null; maxDurationSeconds: number; maxBytes: number; stopTimeoutSeconds: number };
   transcription: { order: string[]; profiles: Record<string, Profile>; automaticFallback: boolean; totalTimeoutSeconds: number };
-  correction: { enabled: boolean; order: string[]; defaults: ModelSettings; modelSettings: Record<string, ModelSettings>;
+  correction: { automatic: boolean; order: string[]; defaults: ModelSettings; modelSettings: Record<string, ModelSettings>;
     context: { maxChars: number }; totalTimeoutSeconds: number };
   delivery: { dictationMarker: boolean };
   keybindings: Bindings;
@@ -135,7 +135,10 @@ export function parseConfig(value: unknown): Config {
   const order = t.order.map(profileName);
   if (new Set(order).size !== order.length || order.some(name => !Object.hasOwn(profiles, name))) fail("transcription.order references/duplicates");
   const c = object(fallback(root.correction, {}), "correction");
-  keys(c, ["enabled", "order", "modelSettings", "defaults", "context", "totalTimeoutSeconds"], "correction");
+  if (Object.hasOwn(c, "enabled")) throw new ConfigError(
+    "Obsolete pi-oaistt configuration: correction.enabled. Rename to correction.automatic, preserving its boolean value; see migration documentation.",
+  );
+  keys(c, ["automatic", "order", "modelSettings", "defaults", "context", "totalTimeoutSeconds"], "correction");
   const cd = tuning(object(fallback(c.defaults, {}), "correction.defaults"), { thinkingLevel: null, attemptTimeoutSeconds: 15 });
   const settings = object(fallback(c.modelSettings, {}), "correction.modelSettings");
   if (Object.keys(settings).length > 32) fail("correction.modelSettings (at most 32)");
@@ -153,7 +156,7 @@ export function parseConfig(value: unknown): Config {
       stopTimeoutSeconds: integer(fallback(r.stopTimeoutSeconds, 3), 1, 15, "recorder.stopTimeoutSeconds") },
     transcription: { order, profiles, automaticFallback: boolean(fallback(t.automaticFallback, false), "transcription.automaticFallback"),
       totalTimeoutSeconds: seconds(fallback(t.totalTimeoutSeconds, 120), "transcription.totalTimeoutSeconds") },
-    correction: { enabled: boolean(fallback(c.enabled, true), "correction.enabled"), order: correctionOrder, defaults: cd, modelSettings,
+    correction: { automatic: boolean(fallback(c.automatic, true), "correction.automatic"), order: correctionOrder, defaults: cd, modelSettings,
       context: { maxChars: integer(fallback(context.maxChars, 8000), 0, 100000, "correction.context.maxChars") },
       totalTimeoutSeconds: seconds(fallback(c.totalTimeoutSeconds, 30), "correction.totalTimeoutSeconds") },
     delivery: { dictationMarker: boolean(fallback(d.dictationMarker, false), "delivery.dictationMarker") },
