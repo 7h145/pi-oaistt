@@ -182,7 +182,8 @@ test("documented JSON examples parse; defaults stay empty and recommendation req
   assert.equal(parseConfig({}).correction.automatic, true); assert.deepEqual(parseConfig({}).correction.order, []);
   const recommendation = examples.find(e => e.correction?.order?.includes("openai-codex/gpt-6.1-luna"));
   assert.ok(recommendation); assert.equal(parseConfig(recommendation).correction.automatic, true);
-  assert.deepEqual(parseConfig(recommendation).correction.order, ["openai-codex/gpt-6.1-luna"]);
+  assert.equal(recommendation.correction.order[0], "openai-codex/gpt-6.1-luna");
+  assert.deepEqual(parseConfig(recommendation).correction.order, recommendation.correction.order);
   const explicitOther = parseConfig({ correction: { order: ["fixture/one"], modelSettings: { "openai-codex/gpt-6.1-luna": {} } } });
   assert.deepEqual(explicitOther.correction.order, ["fixture/one"]);
 });

@@ -157,68 +157,69 @@ F7 works independently of automatic dictation correction. There is no
 
 ## Correction
 
-`correction.automatic` defaults to `true`, but it does not choose or authorize
-a model. The default `correction.order` is `[]`: no correction requests,
-raw dictation with an unavailable notice, and no useful F7 correction.
-Setting `automatic: false` delivers raw dictation without that notice; F7
-uses the configured order independently.
+Correction needs at least one model in `correction.order`. This list is
+empty (`[]`) by default, so no correction requests are made until you
+configure it. Each model must be registered in Pi and have the credentials
+its provider requires. Use `pi --list-models` to find model IDs.
 
-**Recommended opt-in:** if you choose `openai-codex/gpt-6.1-luna`, merge
-this into your existing correction configuration, preserving unrelated
-settings:
+`correction.automatic` controls what happens after transcription. It
+defaults to `true`: pi-oaistt tries to correct the transcribed text before
+appending it to your draft, using the models you configured. Set it to
+`false` to insert the transcription unchanged, without a correction
+request or correction-failure notice.
+
+**F7 works independently of `correction.automatic`.** It corrects the
+current draft using the same model list, whether automatic correction is
+on or off. You can leave automatic correction off and still use F7 after
+typing, pasting, or dictating.
+
+**Each provider tried receives the target text and bounded conversation
+history.** For dictation, the target is the new transcription, not the
+existing draft. For F7, it is the entire **unsent draft**. Choose providers
+appropriate for that content. To omit conversation history, set
+`correction.context.maxChars` to `0`.
+
+For example, this configuration enables automatic correction and tries
+`openai-codex/gpt-6.1-luna` first, with the current Pi session model as an
+explicit fallback. F7 uses the same list:
 
 ```json
 {
   "correction": {
     "automatic": true,
-    "order": ["openai-codex/gpt-6.1-luna"]
+    "order": [
+      "openai-codex/gpt-6.1-luna",
+      "$current"
+    ]
   }
 }
 ```
 
-This explicitly authorizes that model for automatic correction and F7.
-Use `automatic: false` for F7 only. It is an opinionated example, **not a
-built-in default or fallback**: the extension never inserts it into your
-order or appends it to another chain. Existing credentials, a subscription,
-or the Whisper transcription default do not opt you in. Pi must have the
-model registered and its credentials available; the recommendation is not
-live compatibility or quality evidence.
+Merge this section into `pi-oaistt.json`, preserving your other settings,
+then run **`/oaistt reload`**. To use this list for F7 only, change
+`automatic` to `false`.
 
-Alternatively, to use the current Pi model for manual correction, merge
-this section into `pi-oaistt.json`:
+`"$current"` captures the model selected in Pi when recording or F7 starts.
+Changing Pi's model later does not retarget that correction. The request
+does not inherit the main agent's thinking level. If both entries resolve
+to the same model, it is tried only once. Each correction starts at the
+top of the list and stops at the first valid result.
 
-```json
-{
-  "correction": {
-    "order": ["$current"],
-    "automatic": false,
-    "context": { "maxChars": 8000 }
-  }
-}
-```
+`openai-codex/gpt-6.1-luna` is a recommended opt-in choice, not a shipped
+default. Neither it nor `"$current"` is added automatically because you
+have credentials, a subscription, or the default Whisper setup. Verify
+that the model works for your setup; the recommendation is not live
+compatibility or quality validation.
 
-Run **`/oaistt reload`** after either configuration change. The `$current`
-example enables F7 but leaves automatic dictation correction off. Set
-`automatic` to `true` to also correct each transcription before insertion.
-
-**Each attempted correction provider receives the target text and bounded
-conversation history.** For F7, the target is the entire **unsent draft**.
-Choose only providers appropriate for that content.
-
-`order` accepts named `provider/model-id` entries and `"$current"`, which
-captures the main model's identity when recording or F7 starts. It does
-not inherit the main agent's thinking level. Use `pi --list-models` to
-find named model IDs. Only explicitly listed models are attempted, in
-order; correction starts from the beginning each time.
-
-When ordinary provider failures exhaust the list, dictation inserts the
-raw transcription with a notice; manual correction leaves the draft
-unchanged. Invalid thinking settings stop correction with an error
-rather than trying another model. Cancellation inserts nothing.
+If no model succeeds—including when the list is empty—automatic dictation
+inserts the raw transcription with a notice. F7 leaves the draft unchanged.
+Invalid thinking settings stop correction with an error rather than
+trying another model. Cancellation inserts nothing.
 
 The model is asked for minimal edits, not an answer to the draft, and
 cannot call tools. Its output can still be wrong. Review it before
-submission. See the [correction reference](docs/configuration.md#correction-thinking-and-privacy)
+submission. See the
+[correction reference](docs/configuration.md#correction-thinking-and-privacy)
 for per-model thinking, deadlines, context selection, and failure rules.
 
 ## Configuration
@@ -451,6 +452,11 @@ npm ci --ignore-scripts
 npm run check
 npm test
 ```
+
+[GitHub Actions CI](.github/workflows/ci.yml) runs typechecking and the
+synthetic test suite on Linux with Node 22.19.0 and 24, for pushes and pull
+requests (or manually). It needs no microphone, audio server or provider
+credentials; it does not replace live acceptance.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for engineering evidence and
 [docs/validation.md](docs/validation.md) for live acceptance checks.
