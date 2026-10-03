@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -95,6 +95,7 @@ interface NativeModeFixture {
   pendingUserInputs: string[];
   compactionQueuedMessages: { text: string; mode: string }[];
   onInputCallback?: (text: string) => void;
+  resetExtensionUI(): void;
   setupEditorSubmitHandler(): void;
   setupExtensionShortcuts(runner: { getModelRegistry(): unknown; getShortcuts(config: KeybindingsConfig): Map<string, { handler(ctx: unknown): unknown }> }): void;
   createExtensionUIContext(): ExtensionUIContext;
@@ -144,6 +145,7 @@ export function createPiUI(options: {
   const footerData = {
     getGitBranch: () => null, getExtensionStatuses: () => footerStatuses,
     getAvailableProviderCount: () => 0, onBranchChange: () => () => {},
+    clearExtensionStatuses: () => footerStatuses.clear(),
     setExtensionStatus: (key: string, value: string | undefined) => {
       if (value === undefined) footerStatuses.delete(key); else footerStatuses.set(key, value);
     },
@@ -156,6 +158,12 @@ export function createPiUI(options: {
   mode.editor = mode.defaultEditor;
   mode.pendingUserInputs = [];
   mode.compactionQueuedMessages = [];
+  mode.extensionTerminalInputSubscriptions = new Set();
+  // Unrelated panels/title/agent indicators are absent. Reset's actual editor,
+  // widgets/status and extension shortcut clearing code remains native.
+  mode.setExtensionHeader = () => {};
+  mode.setupAutocompleteProvider = () => {}; mode.updateTerminalTitle = () => {};
+  mode.setWorkingIndicator = () => {}; mode.setHiddenThinkingLabel = () => {};
   mode.flushPendingBashComponents = () => {};
   mode.updatePendingMessagesDisplay = () => {};
   mode.showStatus = () => {};

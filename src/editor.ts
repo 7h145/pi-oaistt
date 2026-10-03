@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -93,7 +93,7 @@ export class DictationEditor extends CustomEditor {
     const changed = (text: string) => {
       const current = this.getExpandedText();
       if (current !== previous) { previous = current; this.#hooks.changed?.(); }
-      downstream?.(text);
+      downstream?.(super.getText()); // Keep native onChange display-text semantics.
     };
     Object.defineProperty(this, "onChange", {
       configurable: true,
@@ -101,6 +101,11 @@ export class DictationEditor extends CustomEditor {
       set: (callback: typeof this.onChange) => { if (callback !== changed) downstream = callback; },
     });
   }
+
+  // Pi resetExtensionUI transfers getText BEFORE session_shutdown. Returning
+  // semantic text prevents reload/takeover from orphaning our private paste map.
+  // Rendering still uses native lines; only transfer/getter semantics expand.
+  override getText(): string { return super.getExpandedText(); }
 
   override setText(text: string): void {
     // Pi transfers getText(), not getExpandedText(), when installing editors.
@@ -150,6 +155,7 @@ export interface EditorBoundary {
   isInstalled(): boolean;
   revision(): number;
   nativeBindings(): Record<string, string | string[] | undefined>;
+  refreshNativeBindings(): void;
   dispose(): void;
 }
 
@@ -180,6 +186,9 @@ export function installEditorBoundary(
     isInstalled: () => ui.getEditorComponent() === factory,
     revision: () => revision,
     nativeBindings: () => bindings?.getResolvedBindings() ?? {},
+    // Full runtime setup only: Pi itself reloads this manager just AFTER
+    // session_start on /reload, so refresh before our conflict snapshot too.
+    refreshNativeBindings: () => bindings?.reload(),
     dispose: () => {
       if (ui.getEditorComponent() !== factory) return;
       // Restore through expanded text for the same reason as first hydration.

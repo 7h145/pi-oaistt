@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -31,33 +31,31 @@ test("missing settings use documented defaults, no implicit correction model", (
   assert.equal(config.recorder.backend, "parecord");
   assert.equal(config.recorder.source, null);
   assert.equal(config.recorder.maxDurationSeconds, 300);
-  assert.equal(config.transcription.endpoint, "https://api.openai.com/v1/audio/transcriptions");
-  assert.equal(config.transcription.model, "whisper-1");
-  assert.equal(config.transcription.apiKeyEnv, "OPENAI_API_KEY");
+  assert.equal(config.transcription.profiles.openai!.endpoint, "https://api.openai.com/v1/audio/transcriptions");
+  assert.equal(config.transcription.profiles.openai!.model, "whisper-1");
+  assert.deepEqual(config.transcription.profiles.openai!.auth, { type: "env", name: "OPENAI_API_KEY" });
   assert.equal(config.correction.enabled, true);
-  assert.deepEqual(config.correction.models, []);
+  assert.deepEqual(config.correction.order, []);
   assert.equal(config.correction.context.maxChars, 8000);
 });
 
 test("snapshot is independent and deeply frozen", () => {
-  const config = parseConfig({ correction: { models: ["local/model", "remote/model"] } });
+  const config = parseConfig({ correction: { order: ["local/model", "remote/model"] } });
   const snapshot = configSnapshot(config);
-  config.correction.models.reverse();
+  config.correction.order.reverse();
   config.recorder.source = "later-source";
-  assert.deepEqual(snapshot.correction.models, ["local/model", "remote/model"]);
+  assert.deepEqual(snapshot.correction.order, ["local/model", "remote/model"]);
   assert.equal(snapshot.recorder.source, null);
-  assert.throws(() => snapshot.correction.models.push("unlisted/model"), TypeError);
+  assert.throws(() => snapshot.correction.order.push("unlisted/model"), TypeError);
   assert.throws(() => { snapshot.correction.context.maxChars = 0; }, TypeError);
 });
 
 test("explicit compatible/local endpoint, null auth and disabled context/correction", () => {
-  const config = parseConfig({ transcription: {
-    endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", apiKeyEnv: null, model: "local-stt", language: "de",
-  }, correction: { enabled: false, context: { maxChars: 0 } } });
-  assert.equal(transcriptionKey(config, {}), undefined);
+  const config = parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "http://127.0.0.1:9000/v1/audio/transcriptions", model: "local-stt", auth: { type: "none" }, language: "de" } } }, correction: { enabled: false, context: { maxChars: 0 } } });
+  assert.equal(transcriptionKey(config.transcription.profiles.openai!, {}), undefined);
   assert.equal(config.correction.context.maxChars, 0);
   assert.equal(config.correction.enabled, false);
-  assert.equal(config.transcription.model, "local-stt");
+  assert.equal(config.transcription.profiles.openai!.model, "local-stt");
 });
 
 for (const value of [
@@ -65,15 +63,15 @@ for (const value of [
   { recorder: { backend: "auto" } }, { recorder: { source: "bad\nsource" } },
   { recorder: { maxDurationSeconds: 0 } }, { recorder: { stopTimeoutSeconds: 1.5 } },
   { recorder: { maxBytes: Number.MAX_SAFE_INTEGER } },
-  { transcription: { endpoint: "not-a-url" } },
-  { transcription: { endpoint: "https://synthetic:secret@example.invalid/stt" } },
-  { transcription: { endpoint: "https://example.invalid/stt?key=synthetic" } },
-  { transcription: { endpoint: "file:///synthetic" } },
-  { transcription: { model: "" } }, { transcription: { language: "" } },
-  { transcription: { apiKeyEnv: "!synthetic-command" } },
-  { transcription: { timeoutSeconds: null } },
-  { correction: { enabled: "false" } }, { correction: { models: ["$current"] } },
-  { correction: { models: ["provider/"] } }, { correction: { models: [12] } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "not-a-url", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" } } } } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://synthetic:secret@example.invalid/stt", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" } } } } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://example.invalid/stt?key=synthetic", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" } } } } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "file:///synthetic", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" } } } } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "", auth: { type: "env", name: "OPENAI_API_KEY" } } } } }, { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" }, language: "" } } } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "!synthetic-command" } } } } },
+  { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "OPENAI_API_KEY" }, attemptTimeoutSeconds: null } } } },
+  { correction: { enabled: "false" } }, { correction: { order: ["$unknown"] } },
+  { correction: { order: ["provider/"] } }, { correction: { order: [12] } },
   { correction: { context: { maxChars: -1 } } }, { correction: { context: { maxChars: 1.5 } } },
   { correction: { context: { unknown: 2 } } }, { correction: { timeout: 30 } },
 ]) {
@@ -83,16 +81,16 @@ for (const value of [
 }
 
 test("credential resolution uses only selected env and does not echo values", () => {
-  const config = parseConfig({ transcription: { apiKeyEnv: "FIXTURE_STT_KEY" } });
-  assert.equal(transcriptionKey(config, { FIXTURE_STT_KEY: "synthetic-test-value" }), "synthetic-test-value");
-  assert.throws(() => transcriptionKey(config, { OPENAI_API_KEY: "unselected-synthetic" }), /credential unavailable/);
-  assert.throws(() => transcriptionKey(config, { FIXTURE_STT_KEY: "synthetic\nvalue" }), (error: unknown) =>
+  const config = parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "whisper-1", auth: { type: "env", name: "FIXTURE_STT_KEY" } } } } });
+  assert.equal(transcriptionKey(config.transcription.profiles.openai!, { FIXTURE_STT_KEY: "synthetic-test-value" }), "synthetic-test-value");
+  assert.throws(() => transcriptionKey(config.transcription.profiles.openai!, { OPENAI_API_KEY: "unselected-synthetic" }), /credential unavailable/);
+  assert.throws(() => transcriptionKey(config.transcription.profiles.openai!, { FIXTURE_STT_KEY: "synthetic\nvalue" }), (error: unknown) =>
     error instanceof ConfigError && !error.message.includes("synthetic"));
 });
 
 test("temporary source adjustment never writes, explicit save changes source only", async () => {
   const { dir, store: config } = await store();
-  const original = { transcription: { model: "explicit-fixture-model" }, correction: { enabled: false } };
+  const original = { transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "explicit-fixture-model", auth: { type: "env", name: "OPENAI_API_KEY" } } } }, correction: { enabled: false } };
   await writeFile(config.path, JSON.stringify(original));
   const first = await config.load();
   config.setSource("fixture-input");
@@ -110,7 +108,7 @@ test("temporary source adjustment never writes, explicit save changes source onl
 
 test("missing file/list creates no config until explicit source save", async () => {
   const { dir, store: config } = await store();
-  assert.deepEqual((await config.load()).correction.models, []);
+  assert.deepEqual((await config.load()).correction.order, []);
   assert.deepEqual(await readdir(dir), []);
   await assert.rejects(config.saveSource(), /No temporary source/);
   config.setSource("fixture-input");
@@ -122,9 +120,9 @@ test("live edits to other fields are preserved on save", async () => {
   const { store: config } = await store();
   await config.load();
   config.setSource("fixture-input");
-  await writeFile(config.path, JSON.stringify({ correction: { models: ["fixture/new-model"] } }));
+  await writeFile(config.path, JSON.stringify({ correction: { order: ["fixture/new-model"] } }));
   await config.saveSource();
-  assert.deepEqual((await config.load()).correction.models, ["fixture/new-model"]);
+  assert.deepEqual((await config.load()).correction.order, ["fixture/new-model"]);
 });
 
 test("invalid JSON or field fails without source saving or secret disclosure", async () => {

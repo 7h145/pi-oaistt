@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -28,7 +28,7 @@ function harness() {
   const ready = deferred<void>();
   const stopped = deferred<AudioFile>();
   const transcription = deferred<string>();
-  const correction = deferred<{ text: string; rawFallback: boolean }>();
+  const correction = deferred<import("../src/correction.ts").CorrectionOutcome>();
   let cleanup: Promise<void> = Promise.resolve();
   let text = "typed draft";
   let current = true;
@@ -96,18 +96,19 @@ test("responsive start/stop, single operation, config snapshot and latest-draft 
   assert.equal(h.counts().recordings, 0); // command returned before lifetime work
   await nextTask();
   h.config.recorder.source = "changed-after-start";
-  h.config.transcription.endpoint = "http://changed.invalid/stt";
-  h.config.correction.models.push("unlisted/model");
-  h.toggle(); // stop during pending startup, not a second operation
-  assert.equal(h.controller.phase, "stopping");
+  h.config.transcription.profiles.openai!.endpoint = "http://changed.invalid/stt";
+  h.config.correction.order.push("unlisted/model");
+  h.toggle(); // Starting toggle only reports phase, never implicit stop.
+  assert.equal(h.controller.phase, "starting");
   h.ready.resolve(); await nextTask();
+  h.toggle(); await nextTask();
   assert.equal(h.counts().stops, 1);
   h.toggle();
   assert.equal(h.counts().recordings, 1);
   h.stopped.resolve({ path: "/synthetic/audio.wav", bytes: 100 }); await nextTask();
   h.transcription.resolve("raw fixture"); await nextTask();
   h.setDraft("typing continued\n");
-  h.correction.resolve({ text: "corrected fixture", rawFallback: false });
+  h.correction.resolve({ kind: "corrected", text: "corrected fixture" });
   await h.controller.settled();
   assert.equal(h.text(), "typing continued\ncorrected fixture");
   assert.equal(h.controller.phase, "idle");
@@ -115,8 +116,8 @@ test("responsive start/stop, single operation, config snapshot and latest-draft 
   assert.equal(h.counts().writes, 1);
   assert.equal(h.settings.every((config) => config === h.settings[0]), true);
   assert.equal(h.settings[0]!.recorder.source, null);
-  assert.equal(h.settings[0]!.transcription.endpoint, "https://api.openai.com/v1/audio/transcriptions");
-  assert.deepEqual(h.settings[0]!.correction.models, []);
+  assert.equal(h.settings[0]!.transcription.profiles.openai!.endpoint, "https://api.openai.com/v1/audio/transcriptions");
+  assert.deepEqual(h.settings[0]!.correction.order, []);
   assert.equal(h.phases.at(-1), "idle");
 });
 
@@ -135,7 +136,7 @@ for (const phase of ["starting", "recording", "stopping", "transcribing", "corre
       h.ready.resolve();
       h.stopped.resolve({ path: "/synthetic/audio.wav", bytes: 100 });
       h.transcription.resolve("late raw fixture");
-      h.correction.resolve({ text: "late corrected fixture", rawFallback: true });
+      h.correction.resolve({ kind: "exhausted" });
       await h.controller.settled();
       assert.equal(h.text(), "typed draft");
       assert.equal(h.counts().writes, 0);
@@ -209,7 +210,7 @@ for (const outcome of ["exhausted", "error", "empty"] as const) {
     const h = harness();
     await advance(h, "correcting");
     if (outcome === "error") h.correction.reject(new Error("synthetic provider details"));
-    else h.correction.resolve({ text: outcome === "empty" ? "" : "raw fixture", rawFallback: true });
+    else h.correction.resolve(outcome === "empty" ? { kind: "corrected", text: "" } : { kind: "exhausted" });
     await h.controller.settled();
     assert.equal(h.text(), "typed draft raw fixture");
     assert.deepEqual(h.notices, ["Correction unavailable; inserted raw transcription."]);
@@ -228,7 +229,7 @@ test("total correction deadline yields raw, even when provider ignores abort", a
 
 test("transcription timeout leaves draft unchanged with a redacted failure", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const h = harness(); h.config.transcription.timeoutSeconds = 1;
+  const h = harness(); h.config.transcription.totalTimeoutSeconds = 1;
   await advance(h, "transcribing");
   t.mock.timers.tick(1000); await h.controller.settled();
   assert.equal(h.text(), "typed draft");
@@ -268,7 +269,7 @@ test("replacement identity without explicit cancellation still prevents all deli
   const h = harness(); await advance(h, "correcting");
   const phases = [...h.phases];
   h.loseOwner();
-  h.correction.resolve({ text: "obsolete fixture", rawFallback: true });
+  h.correction.resolve({ kind: "exhausted" });
   await h.controller.settled();
   assert.equal(h.counts().writes, 0);
   assert.deepEqual(h.notices, []);
@@ -311,4 +312,11 @@ test("submission after delivery during held cleanup does not report an unfinishe
   h.controller.cancel("submitted");
   assert.deepEqual(h.notices, []);
   cleanup.resolve(); await h.controller.settled();
+});
+
+test("monotonic deadline rejects late synchronous success even before timer dispatch", async () => {
+  await assert.rejects(bounded(async () => {
+    const end = performance.now() + 5; while (performance.now() < end) { /* synthetic event-loop starvation */ }
+    return "late synthetic";
+  }, new AbortController().signal, 1), TimeoutError);
 });

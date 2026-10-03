@@ -1,70 +1,102 @@
-# Live validation checklist
+# v0.2.0 live acceptance checklist
 
-One owner-confirmed local dictation/draft/manual-submit check has passed.
-The following checks remain broader acceptance work, not claims of universal
-support. Use synthetic speech/text and record only pass/fail, environment versions
-and timing—not audio, transcripts, credentials or private settings.
+Automated/native synthetic tests do not establish microphone completeness, physical
+keyboard delivery or provider quality. Historical v0.1 owner-confirmed local
+capture/draft/manual-submit success is not new v0.2 acceptance.
 
-## Prepare
+Use synthetic speech/text. Record only pass/fail, versions, broad deployment type,
+phase and timing—no audio, transcripts, credentials, device identifiers or private
+configuration. Do not enable raw provider/terminal tracing.
 
-- Load the code with `/reload`; check `/oaistt status`.
-- Confirm your actual transcription destination in your private config. Status
-  reports coarse policy, not endpoint values. Missing config means OpenAI defaults.
-- Keep correction disabled for initial audio/editor checks. Do not enable it until
-  you explicitly choose and approve each correction candidate/destination.
-- Have an available, unmuted microphone and installed `pactl`/`parecord` clients.
-  Do not change host defaults merely for testing. Playback monitors are not mics.
-- Do not enable raw terminal/provider tracing during these checks.
+## Prepare deliberately
 
-## Audio and draft
+- Migrate the private v0.1 file explicitly; inspect actual endpoint/model/auth intent.
+  No file/transcription section means the built-in OpenAI profile.
+- Load code/keys with full Pi `/reload`, then inspect `/oaistt` help/status.
+- Confirm `pactl`/`parecord`, host-approved audio access and available unmuted microphone.
+  Do not alter host defaults/volume or expose a socket merely for testing. Monitors
+  are not microphones. Boxed sockets can grant broad audio access/control.
+- Begin with auto-correction disabled, fallback/marker off. Enable providers/features
+  only when you intend their data exposure. Set history budget 0 if desired.
 
-1. Start with F8, wait for `● REC`, speak a short synthetic phrase, stop with F8.
-   Check beginning/end, appended text and review before manual submission.
-2. Repeat in the same session. Keep typing during capture/processing; your latest
-   draft must remain intact, followed by one appended result.
-3. Try a multiline draft with a large pasted synthetic block and ordinary path
-   references. One undo after append should restore the pre-append draft without
-   dangling collapsed-paste markers. Do not upload real attachments just for a test.
-4. Cancel while recording, then during processing if you can catch that phase.
-   `/oaistt cancel` must leave no result, no REC label and no pending operation.
+## Audio, append and cleanup
 
-## Busy, submission and lifecycle
+1. F8, wait for REC, speak a synthetic phrase, F8, review the unsent result.
+   Check first/last words and wall-clock/sample duration. Repeat.
+2. Keep typing through capture/processing: append once to latest text, not cursor.
+3. Include multiline/large paste plus synthetic image/path references. Undo restores
+   pre-append semantic text; collapsed display may expand. Test clipboard behavior
+   only with approved synthetic content, never real attachments for convenience.
+4. F12 or `/oaistt cancel` during recording/processing: no late text or stale REC.
+   Confirm teardown/restart without orphaned child/private recordings. Failures
+   never upload forced-stop or invalid audio.
 
-- While Pi is already working, start/stop dictation and continue typing. Main work
-  must not be aborted or fed an automatic prompt. Check draft delivery while busy
-  if the main operation lasts long enough.
-- For a synthetic prompt you deliberately intend to submit to the main agent,
-  submit before dictation delivery—while recording is an easy timing window.
-  Expect one muted discard notice and no late text in the new draft. Try ordinary
-  submit and follow-up/compaction paths when available; note which were observed.
-- Request session/branch navigation before delivery. Expect discard, even if a
-  later navigation step is vetoed. Returning must not recover the old result.
-- Reload while capturing/processing: owned work must be discarded, feedback
-  cleared, the draft preserved and a fresh operation possible after reload.
-- Pi Escape remains the main-agent control, not dictation cancel. Use it only when
-  you intend to abort main work. Escape inside the source dialog cancels that choice.
+## F7 manual correction
 
-## Source and feedback
+- Configure an explicit approved model order; F7 works with automatic correction off
+  and while the main agent is busy. No mic/STT/main-agent turn, submit or queue.
+- Correct a synthetic draft with spacing, multiline paste and reference paths. Direct
+  whole-draft replacement, single undo; identical output makes no undo entry.
+- While pending, type, paste, set/undo/edit-and-revert or attach synthetic content:
+  abort/discard, latest user draft retained, no restoration or raw insertion.
+- Cursor/focus/dialog-only movement does not cancel. F7 in another focused dialog
+  must not secretly correct the main draft. Empty/whitespace draft makes no request.
+- F12, submit-and-retype, session/editor replacement and full reload invalidate;
+  settings-only reload leaves the old frozen request intact. Failed new settings
+  block future work without cancelling already authorized work.
 
-- `/oaistt source` opens a choice dialog. Cancel it; draft, source and active
-  dictation must remain unchanged. Confirm a valid source only when you intend
-  that temporary route; the extension never changes the host default.
-- Source choices are temporary. Exercise `--save` only if you intend persistence;
-  inspect your private config yourself. Settings reload cannot reroute active work.
-- Check REC/timer and processing labels at narrow widths, regular/fullscreen and
-  your terminal/tmux bindings. The above-editor widget must remain visible even
-  with a replacement footer. Check no stale label after cancellation/shutdown.
-- Synthetic tests cover 12/20/80-column native stock/replacement footer rendering
-  and source-dialog focus; they do not prove your complete live layout or compositor.
+## Busy, capture and lifecycle
 
-## Correction and provider matrix
+Test regular submit/steer, follow-up and compaction queues before result delivery:
+muted discard, no late edit to a new draft, and main work unaffected. Try session/
+branch requests, including a veto if practical; returning cannot recover old work.
+Escape remains the main-agent control, never oaistt cancellation.
 
-Once you approve explicit `provider/modelId` candidates, test minimal edits,
-technical names, ambiguous/multilingual phrases and intent preservation. Start
-with `context.maxChars: 0` if you do not want conversation history sent. Correction
-is fallible; inspect before sending.
+Full Pi reload cancels old work and restores semantic draft state/registrations.
+Editor instance/history may change; do not claim seamless cross-reload undo.
 
-Test ordered unavailable-first/success-next, exhaustion/raw notice and cancellation
-without fallback. Each attempted provider receives transcript/context; cancellation
-cannot recall sent data. Never add an unapproved remote candidate for convenience.
-Local success does not establish remote STT/auth or correction-provider compatibility.
+## Profiles, saves and provider boundaries
+
+- `transcription list`/tool metadata expose names/model labels/policy, no endpoints,
+  credentials, audio or draft. Unknown/inactive selection fails, without probing.
+- Temporary selection affects only next operation. With fallback off, unreachable
+  selected endpoint cannot upload to another profile.
+- If deliberately enabling fallback, verify following-only/no-wrap behavior, visible
+  safe warnings and sticky successful profile. Review remote upload consent first.
+- Change/reselect/save/reload while success is held: newer choice wins. Conversation
+  changes preserve preference; later correction cancellation does not erase an
+  earlier legitimate STT success. Late cancelled STT cannot publish preference.
+- Exercise `--save` only when intended. Inspect private saved order/source yourself:
+  front promotion, other relative order/fields/inactive entries preserved, no auto-save.
+- Recorder source with no name is read-only, not a dialog. Explicit `default` follows
+  server default, not PULSE_SOURCE. Listing and overrides never mutate the host.
+
+## Correction thinking and quality
+
+Approve each ordered destination first. Test explicit `$current` plus literals,
+main identity change while recording, alias dedupe and named tuning outside order.
+No implicit/sticky correction model should appear.
+
+Check null/unset/off and approved supported levels on selected actual providers;
+verify mapped controls and quality using synthetic technical names, ambiguity and
+multilingual text. Locally invalid thinking gives red error plus guarded raw
+speech/manual unchanged, no next request or ordinary exhaustion notice. Supported
+provider rejection permits normal failover. Never edit capability metadata silently
+to make tests pass. Normal exhaustion is raw/unchanged; cancellation is no result.
+
+## Marker, keys and feedback
+
+- Marker disabled/enabled: only strict-empty latest draft qualifies, not whitespace,
+  references, mixed/repeated input. It never enters correction input or comes from F7;
+  later edits/removal and one undo behave normally.
+- Default/rebound/disabled/multiple F7/F8/F12 keys, exact command aliases, native key
+  conflicts and other-extension Pi-priority warnings. Settings-only key changes stay
+  pending until full reload; commands remain recovery controls.
+- Check physical terminal/tmux interception, narrow regular/fullscreen layouts,
+  theme changes, stock/compositor/replacement footers and widget visibility.
+  Warnings/notices/status must not duplicate, outlive ownership or become context.
+
+Record the matrix separately: normal Linux / owner-approved boxed; local / remote
+compatible STT; each selected correction provider; physical terminal/tmux and busy/
+compaction paths actually observed. Missing cells remain untested, not inferred from
+synthetic HTTP/faux providers or one successful route.

@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -51,7 +51,7 @@ const platform: RecorderPlatform = {
 };
 
 async function recordingSource(config: Config, signal: AbortSignal, host: RecorderPlatform): Promise<string> {
-  const name = config.recorder.source ?? host.sourceEnv ??
+  const name = config.recorder.source ??
     (await host.query(["get-default-source"], signal)).trim();
   signal.throwIfAborted();
   if (!name || /[\u0000-\u001f\u007f]/u.test(name)) throw new DictationError("No recording source is available.");
@@ -276,5 +276,20 @@ export function recordParecord(
   overrides: Partial<RecorderPlatform> = {},
 ): Recording {
   if (process.platform !== "linux") throw new DictationError("Dictation recording is supported on Linux only.");
-  return new ParecordRecording(config, signal, hooks, { ...platform, sourceEnv: process.env.PULSE_SOURCE, ...overrides });
+  return new ParecordRecording(config, signal, hooks, { ...platform, ...overrides });
+}
+
+
+/** Explicit user listing only: bounded source labels, no Pulse properties dump. */
+export async function listRecordingSources(signal: AbortSignal, host: Pick<RecorderPlatform, "query"> = platform) {
+  const current = (await host.query(["get-default-source"], signal)).trim();
+  let sources: unknown;
+  try { sources = JSON.parse(await host.query(["--format=json", "list", "sources"], signal)); }
+  catch { throw new DictationError("Pulse source information is incompatible."); }
+  signal.throwIfAborted();
+  if (!Array.isArray(sources)) throw new DictationError("Pulse source information is incompatible.");
+  return sources.slice(0, 64).filter(s => s && typeof s.name === "string").map(s => ({
+    name: s.name.replace(/[\p{Cc}\p{Cf}]/gu, "").slice(0, 512), default: s.name === current, muted: s.mute === true,
+    monitor: s.name.endsWith(".monitor") || s.monitor_of_sink != null && s.monitor_of_sink !== 4294967295 && s.monitor_of_sink !== "4294967295",
+  }));
 }

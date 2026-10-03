@@ -6,42 +6,32 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
+import { Type } from "@earendil-works/pi-ai";
+import { ProfileSelection, safeLabel } from "./profiles.ts";
+import { ACTIONS, DEFAULT_BINDINGS, nativeSafe, type Action, type Bindings } from "./keys.ts";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { ConfigError, ConfigStore, parseConfig, transcriptionKey, type Config } from "./config.ts";
+import { ConfigError, ConfigStore, transcriptionKey, type Config } from "./config.ts";
 import { correct } from "./correction.ts";
 import { installEditorBoundary, type EditorBoundary } from "./editor.ts";
-import { OperationController, type DeliveryOwner, type Phase, type Pipeline } from "./operation.ts";
-import { recordParecord } from "./recorder.ts";
-import { transcribe } from "./transcription.ts";
+import { OperationController, type DeliveryOwner, type Phase, type Pipeline, type OperationKind } from "./operation.ts";
+import { recordParecord, listRecordingSources } from "./recorder.ts";
+import { transcribe, prepareAudio, transcriptionChain, TranscriptionFailure } from "./transcription.ts";
 
 export const STATUS_KEY = "footer-compositor:right:80:pi-oaistt";
 export const WIDGET_KEY = "pi-oaistt";
-const USAGE = "F8 or /oaistt: start/stop. /oaistt cancel | status | reload | source <name|default> [--save]";
-const routeLabel = (config: Config) => config.transcription.endpoint === "https://api.openai.com/v1/audio/transcriptions"
-  ? "OpenAI transcription" : "configured transcription endpoint";
-type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource">;
+const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/source NAME [--save] | reload. Key changes require full Pi /reload.";
+type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile">;
 export interface Dependencies {
-  store: Store;
-  record: Pipeline["record"];
-  transcribe: typeof transcribe;
-  correct: typeof correct;
-  key: typeof transcriptionKey;
-  clock: () => number;
+  store: Store; record: Pipeline["record"]; transcribe: typeof transcribe; correct: typeof correct;
+  key: typeof transcriptionKey; prepare: typeof prepareAudio; sources: typeof listRecordingSources; clock: () => number;
 }
 interface Scope {
-  ctx: ExtensionContext;
-  id: string;
-  boundary?: EditorBoundary;
-  config?: Config;
-  configError?: string;
-  changing: boolean;
-  feedback?: Feedback;
-  dialogAbort: AbortController;
+  ctx: ExtensionContext; id: string; boundary?: EditorBoundary; feedback?: Feedback; abort: AbortController;
 }
 
 /** One short public widget also covers footers that ignore extension statuses. */
@@ -96,13 +86,15 @@ class Feedback {
 
 /** Factory has no processes, timers, config I/O or provider work. */
 export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependencies> = {}) {
-  const deps: Dependencies = {
-    store: new ConfigStore(getAgentDir()), record: recordParecord, transcribe, correct,
-    key: transcriptionKey, clock: () => performance.now(), ...overrides,
-  };
-  const controller = new OperationController();
-  let scope: Scope | undefined;
-  let owner: DeliveryOwner | undefined;
+  const deps: Dependencies = { store: new ConfigStore(getAgentDir()), record: recordParecord, transcribe, correct,
+    key: transcriptionKey, prepare: prepareAudio, sources: listRecordingSources, clock: () => performance.now(), ...overrides };
+  const controller = new OperationController(), selection = new ProfileSelection();
+  let scope: Scope | undefined, owner: DeliveryOwner | undefined;
+  let initialized = false, keysInstalled = false, changing = 0, reloading = 0, epoch = 0, configError: string | undefined;
+  let activeBindings: Bindings = structuredClone(DEFAULT_BINDINGS);
+  for (const action of ACTIONS) activeBindings[action] = [];
+  let activeProfile: string | undefined;
+  let registeredBindings: Bindings | undefined;
   const live = (candidate: Scope): boolean => {
     if (scope !== candidate) return false;
     try { return candidate.ctx.sessionManager.getSessionId() === candidate.id; } catch { return false; }
@@ -110,158 +102,235 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
   const notice = (ctx: ExtensionContext, message: string) => {
     if (ctx.hasUI) ctx.ui.notify(ctx.ui.theme.fg("muted", message), "info");
   };
-  const configFailure = (error: unknown) => error instanceof ConfigError ? error.message : "Cannot load dictation configuration.";
-
-  async function load(candidate: Scope, report = true): Promise<void> {
-    candidate.changing = true;
+  const error = (ctx: ExtensionContext, message: string) => { if (ctx.hasUI) ctx.ui.notify(message, "error"); };
+  const configFailure = (cause: unknown) => cause instanceof ConfigError ? cause.message : "Cannot load oaistt configuration.";
+  const validScope = (ctx: ExtensionContext): Scope | undefined => {
+    if (ctx.mode !== "tui") { notice(ctx, "pi-oaistt requires interactive terminal mode; no recorder or editor correction started."); return; }
+    if (!scope || !live(scope)) { notice(ctx, "oaistt is not ready in this session."); return; }
+    return scope;
+  };
+  async function load(ctx: ExtensionContext): Promise<void> {
+    const candidate = scope;
+    const request = ++epoch; selection.invalidate(); changing++; reloading++;
     try {
       const config = await deps.store.load();
-      if (live(candidate)) { candidate.config = config; candidate.configError = undefined; }
-    } catch (error) {
-      if (live(candidate)) {
-        candidate.config = undefined; candidate.configError = configFailure(error);
-        if (report) notice(candidate.ctx, candidate.configError);
-      }
-    } finally { candidate.changing = false; }
+      if (request !== epoch) return;
+      selection.reset(config); configError = undefined;
+      if (candidate && live(candidate)) for (const message of config.keyErrors) error(ctx, message);
+    } catch (cause) {
+      if (request !== epoch) return;
+      selection.reset(); configError = configFailure(cause); if (candidate && live(candidate)) error(ctx, configError);
+    } finally { changing--; reloading--; }
   }
   async function teardown(reason: "shutdown" | "session changed"): Promise<void> {
-    const old = scope;
-    controller.cancel(reason); // invalidate BEFORE the first await
-    old?.feedback?.clear();
-    old?.dialogAbort.abort();
+    const old = scope; controller.cancel(reason); old?.feedback?.clear(); old?.abort.abort();
     await controller.settled();
     if (old && live(old)) {
-      if (controller.active) notice(old.ctx, "Dictation cleanup failed; check owned recorder before restarting.");
+      if (controller.active) notice(old.ctx, "Recorder cleanup failed; check owned recorder before restarting.");
       old.boundary?.dispose();
     }
-    if (scope === old) { scope = undefined; owner = undefined; }
+    if (scope === old) { scope = undefined; owner = undefined; activeProfile = undefined; }
   }
-
+  function installKeys(current: Scope): void {
+    if (keysInstalled) return;
+    keysInstalled = true;
+    current.boundary?.refreshNativeBindings();
+    const config = selection.config;
+    if (!config) { error(current.ctx, "Configuration unavailable; fix settings then full Pi /reload for shortcut bindings."); return; }
+    registeredBindings = structuredClone(config.keybindings);
+    const resolved = nativeSafe(config.keybindings, current.boundary?.nativeBindings() ?? {});
+    activeBindings = resolved.bindings;
+    for (const message of resolved.errors) error(current.ctx, message);
+    for (const action of ACTIONS) for (const key of activeBindings[action]) {
+      pi.registerShortcut(key as Parameters<ExtensionAPI["registerShortcut"]>[0], {
+        description: `oaistt ${action} (never submits)`, handler: ctx => {
+          // A cached old native dispatcher cannot resurrect an invalid scope.
+          if (scope && live(scope)) dispatch(action, ctx);
+        },
+      });
+    }
+  }
   pi.on("session_start", async (_event, ctx) => {
     if (scope) await teardown("session changed");
     if (ctx.mode !== "tui") return;
-    const current: Scope = { ctx, id: ctx.sessionManager.getSessionId(), changing: false, dialogAbort: new AbortController() };
+    const current: Scope = { ctx, id: ctx.sessionManager.getSessionId(), abort: new AbortController() };
     scope = current;
-    try { current.boundary = installEditorBoundary(pi, ctx, () => controller.cancel("submitted")); }
-    catch { notice(ctx, "pi-oaistt requires the stock Pi editor; another editor is installed."); }
-    await load(current);
-    if (live(current) && current.boundary?.isInstalled() && current.config) {
-      notice(ctx, `pi-oaistt ready (${routeLabel(current.config)}). F8 or /oaistt starts/stops; /oaistt help lists controls.`);
-    }
+    try { current.boundary = installEditorBoundary(pi, ctx, () => controller.cancel("submitted"), () => controller.contentChanged()); }
+    catch { error(ctx, "pi-oaistt requires the stock Pi editor; another editor is installed."); }
+    if (!initialized) { initialized = true; await load(ctx); }
+    if (!live(current)) return;
+    installKeys(current);
+    if (current.boundary?.isInstalled() && selection.config) notice(ctx, "pi-oaistt ready. Defaults: F8 dictation, F7 draft correction, F12 cancel; /oaistt help lists active controls.");
   });
-  // Navigation requests conservatively cancel even if another extension vetoes
-  // them later. Do not cancel for compaction, model/tool activity or raw Enter.
-  pi.on("session_before_switch", () => { controller.cancel("session changed"); });
-  pi.on("session_before_fork", () => { controller.cancel("session changed"); });
-  pi.on("session_before_tree", () => { controller.cancel("session changed"); });
-  pi.on("session_tree", () => { controller.cancel("session changed"); });
-  pi.on("session_shutdown", (event) => teardown(
-    event.reason === "quit" || event.reason === "reload" ? "shutdown" : "session changed",
-  ));
+  const navigation = () => { controller.cancel("session changed"); };
+  pi.on("session_before_switch", navigation); pi.on("session_before_fork", navigation);
+  pi.on("session_before_tree", navigation); pi.on("session_tree", navigation);
+  pi.on("session_shutdown", event => teardown(event.reason === "quit" || event.reason === "reload" ? "shutdown" : "session changed"));
 
-  function toggle(ctx: ExtensionContext): void {
-    const current = scope;
-    if (!current || !live(current)) { notice(ctx, "Dictation is not ready in this session."); return; }
-    const commandOwner: DeliveryOwner = {
-      ui: ctx.ui, isCurrent: () => live(current), phase: () => {}, notice: (text) => notice(ctx, text),
-    };
+  function dispatch(action: Action, ctx: ExtensionContext): void {
+    const current = validScope(ctx); if (!current) return;
+    if (action === "operation.cancel") { controller.cancel(); return; }
     if (controller.active) {
-      controller.toggle(current.config ?? parseConfig({}), commandOwner);
+      if (action === "dictation.stop" || action === "dictation.toggle" && controller.phase === "recording") controller.stop();
+      else notice(ctx, `oaistt is ${controller.phase}.`);
       return;
     }
-    if (!current.boundary?.isInstalled()) {
-      notice(ctx, "Dictation requires its stock-editor adapter; restore the stock editor and /reload."); return;
-    }
-    if (current.changing) { notice(ctx, "Dictation configuration is loading; retry shortly."); return; }
-    if (!current.config) { notice(ctx, current.configError ?? "Dictation configuration is unavailable."); return; }
-    let key: string | undefined;
-    try { key = deps.key(current.config); } // fail before microphone startup
-    catch (error) { notice(ctx, configFailure(error)); return; }
-    const session = ctx.sessionManager;
-    const registry = ctx.modelRegistry;
-    let lostEditorNotice = false;
-    let resultFinished = false;
+    if (action === "dictation.stop") { notice(ctx, "No recording is active."); return; }
+    if (!current.boundary?.isInstalled()) { error(ctx, "oaistt requires its stock-editor adapter; restore stock editor and /reload."); return; }
+    if (changing) { notice(ctx, "oaistt configuration is loading; retry shortly."); return; }
+    const config = selection.config;
+    if (!config) { error(ctx, configError ?? "oaistt configuration unavailable."); return; }
+    const manual = action === "editor.correct";
+    if (manual && !ctx.ui.getEditorText().trim()) { notice(ctx, "Nothing to correct."); return; }
+    const token = selection.snapshot();
+    // Read the main identity ONLY for an explicitly listed selector. Never its
+    // thinking level, settings, prompt or implicit fallback/authentication.
+    const selectedModel = config.correction.order.includes("$current") ? ctx.model : undefined;
+    const currentModel = selectedModel && { provider: selectedModel.provider, id: selectedModel.id };
+    let resultFinished = false, lostEditorNotice = false;
     const delivery: DeliveryOwner = {
-      ui: ctx.ui,
+      ui: ctx.ui, revision: () => current.boundary!.revision(),
       isCurrent: () => live(current) && owner === delivery && current.boundary!.isInstalled(),
-      phase: (phase) => {
-        if (phase === "idle") resultFinished = true; // Cleanup can outlive delivery/failure/cancel.
-        feedback.phase(phase);
-      },
-      notice: (text) => { if (live(current) && owner === delivery) notice(ctx, text); },
+      phase: phase => { if (phase === "idle") resultFinished = true; feedback.phase(phase); },
+      notice: text => { if (live(current) && owner === delivery) notice(ctx, text); },
+      error: text => { if (live(current) && owner === delivery) error(ctx, text); },
     };
-    owner = delivery;
+    owner = delivery; activeProfile = manual ? undefined : token.selected;
     const feedback = new Feedback(ctx, deps.clock, () => live(current) && owner === delivery, () => {
       if (current.boundary!.isInstalled()) return true;
       controller.cancel("editor changed"); feedback.clear();
-      if (!resultFinished && !lostEditorNotice) { lostEditorNotice = true; notice(ctx, "Dictation discarded: editor changed."); }
+      if (!resultFinished && !lostEditorNotice) { lostEditorNotice = true; notice(ctx, `${manual ? "Draft correction" : "Dictation"} discarded: editor changed.`); }
       return false;
     });
     current.feedback = feedback;
-    controller.toggle(current.config, delivery, {
+    const stillOwned = () => {
+      if (delivery.isCurrent()) return true;
+      if (owner === delivery) controller.cancel("editor changed");
+      return false;
+    };
+    const warning = (phase: string, signal: AbortSignal, failed: string, reason: string, next: string) => {
+      if (!signal.aborted && delivery.isCurrent()) ctx.ui.notify(`${phase}: ${safeLabel(failed)} failed: ${reason}; trying ${safeLabel(next)}.`, "warning");
+    };
+    const pipeline: Pipeline = {
       record: deps.record,
-      transcribe: (audio, config, signal) => deps.transcribe(audio, config, signal, key),
-      correct: (raw, config, signal) => deps.correct(raw, config, signal, session, registry),
-    });
+      transcribe: async (audio, frozen, signal) => {
+        const deadline = performance.now() + frozen.transcription.totalTimeoutSeconds * 1000;
+        const bytes = await deps.prepare(audio, frozen); signal.throwIfAborted();
+        const result = await transcriptionChain(frozen, token.selected, signal, async (profile, attemptSignal) => {
+          let key: string | undefined;
+          try { key = deps.key(profile); } catch { throw new TranscriptionFailure("credentials unavailable"); }
+          return deps.transcribe(audio, frozen, attemptSignal, key, undefined, profile, bytes);
+        }, (failed, reason, next) => warning("Transcription", signal, failed, reason, next), deadline, stillOwned);
+        signal.throwIfAborted();
+        if (delivery.isCurrent()) { selection.publish(token, result.profile); activeProfile = result.profile; }
+        return result.text;
+      },
+      correct: (target, frozen, signal, kind) => deps.correct(target, frozen, signal, ctx.sessionManager, ctx.modelRegistry, {
+        manual: kind === "manual", current: currentModel, isCurrent: stillOwned,
+        warning: (failed, reason, next) => warning("Correction", signal, failed, reason, next),
+      }),
+    };
+    if (manual) controller.correctDraft(config, delivery, pipeline);
+    else controller.start(config, delivery, pipeline);
     void controller.settled().then(() => {
       if (!live(current) || owner !== delivery) return;
       feedback.clear();
-      if (!resultFinished && !current.boundary!.isInstalled() && !lostEditorNotice) notice(ctx, "Dictation discarded: editor changed.");
-      if (!controller.active) owner = undefined;
+      if (!resultFinished && !current.boundary!.isInstalled() && !lostEditorNotice) notice(ctx, "oaistt discarded: editor changed.");
+      if (!controller.active) { owner = undefined; activeProfile = undefined; }
     });
   }
 
-  async function command(args: string, ctx: ExtensionContext): Promise<void> {
-    if (ctx.mode !== "tui") { notice(ctx, "pi-oaistt requires interactive terminal mode; no recorder was started."); return; }
-    const parts = args.trim().split(/\s+/u).filter(Boolean);
-    if (!parts.length) { toggle(ctx); return; }
-    if (parts.length === 1 && parts[0] === "cancel") { controller.cancel(); return; }
-    if (parts.length === 1 && parts[0] === "help") { notice(ctx, USAGE); return; }
-    const current = scope;
-    if (!current || !live(current)) { notice(ctx, "Dictation is not ready in this session."); return; }
-    if (parts.length === 1 && parts[0] === "status") {
-      notice(ctx, `pi-oaistt: ${controller.phase}. Config: ${current.config ? "ready" : "unavailable"}. ` +
-        `${current.config ? routeLabel(current.config) : "No active transcription settings"}. ` +
-        `Source: ${current.config?.recorder.source ? "configured override" : "automatic (env/default)"}. ` +
-        `Correction: ${current.config?.correction.enabled ? `on (${current.config.correction.models.length} candidates)` : "off"}.`);
-      return;
-    }
-    if (current.changing) { notice(ctx, "Dictation configuration is loading; retry shortly."); return; }
-    if (parts.length === 1 && parts[0] === "reload") {
-      await load(current);
-      if (live(current) && current.config) notice(ctx, "Dictation configuration reloaded.");
-      return;
-    }
-    if (parts[0] !== "source" || parts.length > 3 ||
-        (parts.length === 3 && (parts[2] !== "--save" || parts[1] === "--save"))) {
-      notice(ctx, USAGE); return;
-    }
-    current.changing = true;
+  async function select(name: string, save: boolean): Promise<void> {
+    if (reloading) throw new ConfigError("oaistt configuration is loading; retry shortly.");
+    selection.select(name); // Includes same-name intent before any awaited save.
+    if (!save) return;
+    const request = ++epoch; selection.invalidate(); changing++;
     try {
-      const saveOnly = parts.length === 2 && parts[1] === "--save";
-      const choice = saveOnly ? undefined : parts[1] ?? await ctx.ui.input(
-        "Recording source name (default restores normal routing)", undefined, { signal: current.dialogAbort.signal },
-      );
-      if (!live(current)) return;
-      if (!saveOnly) {
-        if (!choice?.trim()) return;
-        deps.store.setSource(choice.trim() === "default" ? null : choice.trim());
-      }
-      if (saveOnly || parts[2] === "--save") await deps.store.saveSource();
-      if (!live(current)) return;
-      await load(current);
-      if (live(current) && current.config) notice(ctx, saveOnly || parts[2] === "--save"
-        ? "Recording source saved to pi-oaistt.json." : "Recording source changed temporarily; host routing unchanged.");
-    } catch (error) {
-      if (live(current)) { notice(ctx, configFailure(error)); await load(current, false); }
-    } finally { current.changing = false; }
+      await deps.store.saveProfile(name);
+      const config = await deps.store.load();
+      if (request === epoch) selection.saved(config, selection.generation);
+    } finally { changing--; }
   }
-  pi.registerCommand("oaistt", { description: "Toggle dictation; cancel/status/help/reload/source controls", handler: command });
-  pi.registerShortcut("f8", { description: "Start/stop dictation (never submits)", handler: (ctx) => {
-    if (ctx.mode === "tui") toggle(ctx);
-    else notice(ctx, "pi-oaistt requires interactive terminal mode; no recorder was started.");
-  } });
-  return { controller }; // test/embedding observation only, not a global service
+  const bindingsLabel = (bindings: Bindings) => ACTIONS.map(a => `${a}=${bindings[a].join(",") || "unbound"}`).join("; ");
+  function status(ctx: ExtensionContext): void {
+    const config = selection.config;
+    notice(ctx, `oaistt: ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. Config: ${config ? "ready" : "unavailable"}. ` +
+      `Active STT: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}. ` +
+      `Fallback: ${config?.transcription.automaticFallback ? "on" : "off"}. Recorder: ${config?.recorder.source ? "configured override" : "server default"}. ` +
+      `Correction: ${config?.correction.enabled ? "automatic on" : "automatic off"} (${config?.correction.order.length ?? 0} selectors). ` +
+      `Active keys: ${bindingsLabel(activeBindings)}.`);
+    if (config && JSON.stringify(config.keybindings) !== JSON.stringify(registeredBindings)) notice(ctx, `Configured/pending keys: ${bindingsLabel(config.keybindings)}. Full Pi /reload required; native conflicts may disable bindings. Cross-extension conflicts follow Pi priority.`);
+  }
+  async function command(args: string, ctx: ExtensionContext): Promise<void> {
+    const current = validScope(ctx); if (!current) return;
+    const p = args.trim().split(/\s+/u).filter(Boolean);
+    const exact: Record<string, string> = { "": "help", h: "help", s: "status", x: "cancel", rl: "reload", "d t": "dictation toggle", "d start": "dictation start", "d stop": "dictation stop", "r l": "recorder sources", "t l": "transcription list" };
+    const action = exact[p.join(" ")] ?? p.join(" ");
+    if (action === "help") { notice(ctx, USAGE); status(ctx); return; }
+    if (action === "status") { status(ctx); return; }
+    if (action === "cancel") { controller.cancel(); return; }
+    if (["dictation toggle", "dictation start", "dictation stop"].includes(action)) {
+      dispatch(action.replace(" ", ".") as Action, ctx); return;
+    }
+    if (action === "reload") {
+      await load(ctx);
+      if (live(current) && selection.config) { notice(ctx, "oaistt settings reloaded; active operation keeps frozen settings."); status(ctx); }
+      return;
+    }
+    if (action === "transcription list") { notice(ctx, JSON.stringify(selection.metadata(activeProfile))); return; }
+    if (action === "recorder sources") {
+      try { const sources = await deps.sources(current.abort.signal); if (live(current)) notice(ctx, JSON.stringify(sources)); }
+      catch { if (live(current) && !current.abort.signal.aborted) error(ctx, "Cannot list recording sources; check pactl/server access."); }
+      return;
+    }
+    const group = p[0] === "r" && p[1] === "s" ? "recorder" : p[0] === "t" && p[1] === "s" ? "transcription" : p[1] === "source" ? p[0] : undefined;
+    if (!["recorder", "transcription"].includes(group ?? "") || p.length > 4 || p.length === 4 && p[3] !== "--save" || p[2] === "--save") { error(ctx, USAGE); return; }
+    if (p.length === 2) {
+      notice(ctx, group === "recorder" ? `Recording source: ${selection.config?.recorder.source ? safeLabel(selection.config.recorder.source) : "server default"}. Use recorder source NAME [--save].` : `Next transcription profile: ${selection.selected ?? "unavailable"}. Use transcription source NAME [--save].`); return;
+    }
+    if (p.length < 3) { error(ctx, USAGE); return; }
+    const save = p[3] === "--save";
+    try {
+      if (group === "transcription") {
+        await select(p[2]!, save);
+        if (live(current)) notice(ctx, `Transcription profile ${safeLabel(p[2]!)} ${save ? "saved order" : "selected temporarily"}; next: ${selection.selected ?? "unavailable"}. Active operation unchanged.`);
+      } else {
+        if (reloading || !selection.config) throw new ConfigError("oaistt configuration unavailable/loading.");
+        const request = ++epoch; selection.invalidate();
+        deps.store.setSource(p[2] === "default" ? null : p[2]!); changing++;
+        try {
+          if (save) await deps.store.saveSource();
+          const config = await deps.store.load();
+          if (request === epoch) selection.saved(config, selection.generation);
+        } finally { changing--; }
+        if (live(current)) notice(ctx, `Recording source ${save ? "saved" : "changed temporarily"}; host routing unchanged.`);
+      }
+    } catch (cause) { if (live(current)) error(ctx, configFailure(cause)); }
+  }
+  pi.registerCommand("oaistt", { description: "Dictation/draft controls, help/status, profiles, recorder and settings reload", handler: command });
+  async function ensureProfiles(ctx: ExtensionContext): Promise<void> {
+    if (!initialized) { initialized = true; await load(ctx); }
+    if (!selection.config || reloading) throw new ConfigError(configError ?? "oaistt configuration is loading/unavailable.");
+  }
+  pi.registerTool({
+    name: "oaistt_profiles", label: "oaistt profiles", description: "List bounded active/inactive STT names/model labels and selection/fallback policy. Never reads the editor, credentials or audio, probes providers or controls recording.",
+    parameters: Type.Object({}, { additionalProperties: false }), annotations: { readOnlyHint: true, openWorldHint: false },
+    execute: async (_id, _params, _signal, _update, ctx) => {
+      await ensureProfiles(ctx);
+      return { content: [{ type: "text", text: JSON.stringify(selection.metadata(activeProfile)) }], details: undefined };
+    },
+  });
+  pi.registerTool({
+    name: "oaistt_select_profile", label: "oaistt select profile",
+    description: "Only on explicit user intent, select a configured active STT profile for future dictation. save defaults false; true explicitly promotes saved order. No recording, upload, draft access, main-agent control or host audio change. Subject to normal harness permissions.",
+    parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }), save: Type.Optional(Type.Boolean()) }, { additionalProperties: false }),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    execute: async (_id, params, _signal, _update, ctx) => {
+      await ensureProfiles(ctx);
+      await select(params.name, params.save ?? false);
+      return { content: [{ type: "text", text: JSON.stringify({ requested: params.name, selected: selection.selected, saved: params.save ?? false, default: selection.config?.transcription.order[0] ?? null }) }], details: undefined };
+    },
+  });
+  return { controller, selection };
 }
-
 export default function oaistt(pi: ExtensionAPI): void { registerDictation(pi); }

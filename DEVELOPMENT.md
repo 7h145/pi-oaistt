@@ -10,8 +10,7 @@ The lockfile pins development dependencies; production imports use Pi's public
 root exports. Pi supplies peer modules to loaded extensions.
 
 The approved implementation handoff supplied by the owner remains the product
-contract. The v1 target is not a claim of completed functionality or release
-readiness. No external reference implementation has been copied into this code.
+contract. The v0.2 target is not a claim of live acceptance or release readiness. No external reference implementation has been copied into this code.
 
 ## v0.2.0 work in progress
 
@@ -19,25 +18,63 @@ Owner authorized implementation after the umbrella plan readback. Local annotate
 `v0.1.0` points to `8ddb5a9`; no push/release. Target contract is Pathfinder
 `59c3521`. Private v0.1 settings are deliberately not migrated automatically.
 
-Step 1 (synthetic native API gate): typecheck and **202/202** tests pass.
-New public `onChange` observation proves synchronous semantic revisions through
-programmatic setters, typing, paste and undo/edit-and-revert while preserving Pi's
-assigned downstream callback. Cursor/focus and identical semantic setters do not
-advance revisions. Whole-draft replacement and marker use the same public setter's
-undo transaction; expanded paste maps and synthetic path/image references survive
-undo in regular/fullscreen busy fixtures. Identical replacement does not write.
+### Current v0.2 evidence (automated, not live acceptance)
 
-Public Pi AI supported-level helpers distinguish nonreasoning/off, standard
-reasoning, unsupported null entries and opt-in max. Registry/faux requests and a
-network-disabled native compatible-adapter payload fixture prove omitted reasoning
-and mapped low. Explicit off is represented by omitted `reasoning`, after validating
-support, **not** an invalid off cast. Native shortcut setup captures its map; source
-inspection confirms full reload resets the old callback before new setup. Tests
-isolate that reset (not a complete InteractiveMode reload integration).
+Public safety gate committed as `403b838` before broad implementation. The revised
+schema, shared dictation/manual controller, correction/STT chains, profile service,
+commands/tools/keys and marker are now implemented. **285/285 synthetic tests and
+TypeScript check pass** on Pi 0.99.2 / Node 26.10.0. No microphone, real credentials
+or external provider were used. Existing recorder fixtures spawn only synthetic
+Node children; native compatible payload fixtures explicitly disable HTTP.
 
-Not yet proved: actual F7/controller integration, all thinking payload variants,
-complete reload/conflict lifecycle and live clipboard/hardware/provider acceptance.
-The new replacement/marker primitives are not yet wired to user controls.
+| Area | Evidence |
+| --- | --- |
+| Ownership/editor | Native regular/fullscreen, idle/streaming/compaction F7 and F8, capture, semantic setter/paste/undo, edit-and-revert/submit-retype, empty/identical output, F12/Escape/focus, late uncooperative completion, retained teardown |
+| Correction | Start-frozen current identity, alias/literal dedupe and restart, named/null defaults, local thinking fault before request, unused later tuning, manual whitespace/no-write failures, normal provider failure/exhaustion/deadline/cancel, one projected history snapshot |
+| STT | Consent off/on, following-only/no-wrap/inactive eligibility, fixed failure categories, fresh multipart bodies over identical prepared WAV, explicit per-profile auth, shared-audio errors do not advance, held success versus choice/reselection/reload/cancel, sticky preference survives conversations/later correction cancel |
+| Config/persistence | Strict legacy/unknown/malformed/inactive definitions, finite fractional deadlines, deep snapshots, localized keys/thinking, queued whole source/profile transactions preserving order/fields/mode, held save versus newer temporary choice, failed settings reload preserving active work |
+| UI/keys/tools | Native F7/F8/F12, replacement/disable/multi aliases/native conflicts, pending settings-only keys, exact commands/no bare start/no source dialog, bounded profile-only tools including lazy non-TUI metadata, safe warning categories/labels, narrow/footer/theme regressions |
+| Reload/package | Real discovery/jiti/runner, native reset-before-shutdown, fresh-runtime key change/disable through native dispatcher, semantic paste preservation, public-only production imports |
+
+### Reload transfer finding and fix
+
+A stronger reload fixture exposed an important order: Pi's `resetExtensionUI()`
+restores the default editor **before** emitting shutdown. That transfer uses
+`getText()`, not expanded semantics. Initial hydration/dispose alone cannot save a
+paste created later in our adapter when native reset executes first.
+
+The public subclass now returns semantic expanded text from `getText()` while
+native rendering still uses its lines. Its public change observer forwards native
+visible text to the assigned downstream callback, preserving callback behavior.
+Native reset/fresh-runtime dispatch tests preserve synthetic large paste/reference
+text and disable old bindings. No private production patch/raw-key interception.
+Editor replacement still changes instance/history; this is not cross-reload undo
+preservation or compatibility proof for arbitrary editors/other Pi versions.
+
+Clean project-local `npm ci --ignore-scripts`, typecheck and the complete suite pass.
+Dry-run package review contains only source, synthetic tests, metadata and docs:
+no private configuration, recordings or bundled Pi runtime. Asynchronous completion
+checks also revalidate editor ownership before either chain's next request, not
+merely on the UI timer or final delivery. Monotonic expiry rejects CPU-starved late
+success and includes WAV preparation/context work in chain budgets.
+
+### Acceptance still pending
+
+Owner/tester-assisted v0.2 mic first/last words and sample timing; normal Linux;
+actual local/remote STT/auth compatibility; selected correction/thinking quality;
+physical F7/F8/F12/terminal/tmux and complete busy/compaction/compositor/clipboard
+matrix. See `docs/validation.md`. Native reset/discovery tests fake unrelated UI
+panels, agent/auth and shutdown infrastructure: not a complete live Pi reload.
+Historical v0.1 owner-confirmed audio evidence below remains historical.
+
+Private v0.1 configuration remains untouched. The new format must be explicitly
+migrated before owner reload/dogfooding. No push, publication, v0.2 tag or release
+acceptance is implied. Broader parity, TTS, glossary and `/lazy` remain excluded.
+
+## Historical v0.1 engineering evidence
+
+The sections below retain the original implementation and live observations; use
+current README/configuration documentation for v0.2 behavior/defaults/commands.
 
 ## First feasibility gate: editor capture and delivery
 

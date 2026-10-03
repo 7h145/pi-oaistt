@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -188,17 +188,17 @@ for (const trailing of ["", " ", "\n", "\n\n"]) {
     h.ui.setEditorText("  @src/example.ts\n/tmp/synthetic-image.png\n");
     h.ui.pasteToEditor(longText);
     h.terminal.send(trailing);
-    const visibleBefore = h.mode.editor.getText();
+    const visibleBefore = h.mode.editor.getLines().join("\n");
     const semanticBefore = h.ui.getEditorText();
     assert.match(visibleBefore, /\[paste #/);
     assert.match(semanticBefore, /synthetic pasted line 11/);
     assert.equal(h.append("spoken"), true);
     const expected = semanticBefore + (/\s$/u.test(semanticBefore) ? "" : " ") + "spoken";
     assert.equal(h.ui.getEditorText(), expected);
-    assert.doesNotMatch(h.mode.editor.getText(), /\[paste #/);
+    assert.doesNotMatch(h.mode.editor.getLines().join("\n"), /\[paste #/);
     h.terminal.send("\x1f"); // native ctrl+- undo
     assert.equal(h.ui.getEditorText(), semanticBefore);
-    assert.equal(h.mode.editor.getText(), visibleBefore);
+    assert.equal(h.mode.editor.getLines().join("\n"), visibleBefore);
   });
 }
 
@@ -208,20 +208,20 @@ test("install and restore never orphan an existing collapsed paste", () => {
   const text = "synthetic\n".repeat(15);
   h.ui.pasteToEditor(text);
   const before = h.ui.getEditorText();
-  assert.match(h.mode.editor.getText(), /\[paste #/);
+  assert.match(h.mode.editor.getLines().join("\n"), /\[paste #/);
   const boundary = installEditorBoundary(h.pi as Pick<ExtensionAPI, "getCommands">,
     { ui: h.ui, isIdle: h.isIdle }, () => {});
   assert.equal(h.ui.getEditorText(), before);
-  assert.doesNotMatch(h.mode.editor.getText(), /\[paste #/);
+  assert.doesNotMatch(h.mode.editor.getLines().join("\n"), /\[paste #/);
   h.terminal.send("\x1f");
-  assert.doesNotMatch(h.mode.editor.getText(), /\[paste #/);
+  assert.doesNotMatch(h.mode.editor.getLines().join("\n"), /\[paste #/);
   h.ui.pasteToEditor(text);
   const beforeRestore = h.ui.getEditorText();
   boundary.dispose();
   boundary.dispose();
   assert.equal(h.ui.getEditorText(), beforeRestore);
   assert.equal(h.ui.getEditorComponent(), undefined);
-  assert.doesNotMatch(h.mode.editor.getText(), /\[paste #/);
+  assert.doesNotMatch(h.mode.editor.getLines().join("\n"), /\[paste #/);
 });
 
 test("ownership invalidation/session replacement and new lease ignore late results", () => {
@@ -280,7 +280,7 @@ for (const mode of ["regular", "fullscreen"] as const) {
     h.mode.editor.onChange = () => { callbacks++; };
     h.ui.setEditorText("  @src/synthetic.ts\n/tmp/synthetic.png\n");
     h.ui.pasteToEditor("synthetic pasted line\n".repeat(15));
-    const before = h.ui.getEditorText(), visible = h.mode.editor.getText();
+    const before = h.ui.getEditorText(), visible = h.mode.editor.getLines().join("\n");
     const revision = boundary.revision();
     pending = true; h.terminal.send("x");
     assert.equal(pending, false); assert.equal(cancellations, 1);
@@ -289,7 +289,7 @@ for (const mode of ["regular", "fullscreen"] as const) {
     const lease = new DraftLease();
     assert.equal(lease.replace(h.ui, before, before.replace("@src/", "@lib/"), boundary.isInstalled), true);
     h.terminal.send("\x1f");
-    assert.equal(h.ui.getEditorText(), before); assert.equal(h.mode.editor.getText(), visible);
+    assert.equal(h.ui.getEditorText(), before); assert.equal(h.mode.editor.getLines().join("\n"), visible);
     const same = boundary.revision(); h.terminal.send("\x1b[D"); h.showDialog();
     assert.equal(boundary.revision(), same); // Cursor/focus do not change ownership.
     h.ui.setEditorText(before); assert.equal(boundary.revision(), same);

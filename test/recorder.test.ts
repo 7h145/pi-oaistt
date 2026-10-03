@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -175,4 +175,21 @@ test("duration cap before readiness rejects rather than labelling a header-only 
   await recording.dispose();
   assert.equal(h.limits(), 0);
   assert.deepEqual(await readdir(h.dir), []);
+});
+
+test("explicit default/null resolves server default, not ambient source override", async () => {
+  const h = await platform("normal", { sourceEnv: "synthetic-monitor.monitor" });
+  const recording = h.record({ recorder: { source: null } }); await recording.ready;
+  assert.equal(h.calls[0]![0], "--device=fixture-mic"); await recording.stop();
+});
+test("explicit source listing is bounded read-only metadata without Pulse property dumps", async () => {
+  const { listRecordingSources } = await import("../src/recorder.ts"); const queries: string[][] = [];
+  const items = await listRecordingSources(new AbortController().signal, { query: async args => {
+    queries.push(args); return args[0] === "get-default-source" ? "synthetic-mic" : JSON.stringify([
+      { name: "synthetic-mic", mute: false, monitor_of_sink: 4294967295, properties: { private: "EXCLUDED_SYNTHETIC_METADATA" } },
+      { name: "synthetic.monitor", mute: true, monitor_of_sink: 1 },
+    ]);
+  } });
+  assert.equal(items[0]!.default, true); assert.equal(items[1]!.monitor, true); assert.equal(items[1]!.muted, true);
+  assert.doesNotMatch(JSON.stringify(items), /EXCLUDED|properties/); assert.ok(queries.every(args => !args[0]!.startsWith("set-")));
 });

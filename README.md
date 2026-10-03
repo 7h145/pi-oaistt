@@ -1,106 +1,133 @@
 # pi-oaistt
 
-Speak a draft into Pi, then review it before sending.
+Speak into Pi's draft, review, then send it yourself. Or correct an existing draft
+without recording. Both work while the main agent is busy.
 
-**v0.1.0 — development.** The extension is now loadable for initial real-world
-validation, not a finished v1 product. Pre-v1 compatibility may change. Tested API
-baseline: Pi **0.99.2**, Linux interactive terminal mode; RPC/print/JSON do not
-record. Real microphone, correction quality and terminal/tmux acceptance remain
-in progress.
+**v0.2.0 — development.** Tested API baseline: Pi **0.99.2**, Node **26.10.0**,
+Linux interactive terminal mode. Automated native/synthetic checks are not live
+microphone, keyboard or provider-quality acceptance. Other Pi versions, normal
+Linux deployments and the wider boxed/provider matrix remain unverified.
 
-## Load a local checkout
+## Load
 
-Choose one loading method; do not load the same extension twice.
+Choose one method; do not load the extension twice:
 
-- From the checkout, start Pi with `pi --extension ./index.ts`.
-- Or symlink the checkout into your project's `.pi/extensions/pi-oaistt`, then
-  grant project trust and run **`/reload`**. The directory contains `index.ts` and
-  a Pi package manifest. A link at `.pi/extensions/pi-oaistt` pointing to
-  `../../pi-oaistt` works when the checkout is at the project root.
+- From the checkout: `pi --extension ./index.ts`.
+- Or symlink this checkout into `.pi/extensions/pi-oaistt`, grant project trust,
+  then run Pi's **`/reload`**.
 
-A short “pi-oaistt ready” notice confirms loading, **not microphone or credential
-health**. Run **`/oaistt help`** or **`/oaistt status`** to check the controls.
-The extension loads without opening a microphone or contacting a provider.
-It requires the stock Pi editor; it will not silently replace another extension's
-custom editor.
+Pi supplies the peer modules. A ready notice confirms loading, not microphone,
+authentication or service health. Loading opens no microphone and makes no provider
+request. The extension requires the stock editor and refuses unknown custom-editor
+composition. RPC/print/JSON cannot dictate or correct an editor; the narrow profile
+tools can load metadata lazily without acquiring microphone/editor capabilities.
 
-## Configure before recording
+**Upgrading from v0.1?** Read [migration](docs/configuration.md#migrate-from-v010)
+first. The old singleton STT/correction schema is rejected, not silently rerouted or
+automatically rewritten. Your private configuration must be migrated explicitly.
 
-Settings belong in **`pi-oaistt.json` in Pi's configured agent directory**, not the
-project directory. Without a file, transcription uses OpenAI's
-`https://api.openai.com/v1/audio/transcriptions`, model `whisper-1`, and the
-`OPENAI_API_KEY` environment variable. Missing required auth fails before capture.
+## Configure before use
 
-For an intentionally unauthenticated local compatible server, use your server's
-actual port/model in a configuration like this:
+Use **`pi-oaistt.json` in Pi's configured agent directory**, not a project file.
+With no transcription section/file, the explicit built-in `openai` profile uses
+OpenAI's transcription endpoint, `whisper-1`, and an `OPENAI_API_KEY` environment
+reference. Automatic STT fallback is off; correction order is empty.
+
+For an intentionally unauthenticated local compatible server, adjust port/model:
 
 ```json
 {
   "transcription": {
-    "endpoint": "http://127.0.0.1:9000/v1/audio/transcriptions",
-    "model": "whisper-1",
-    "apiKeyEnv": null
+    "order": ["local"],
+    "profiles": {
+      "local": {
+        "endpoint": "http://127.0.0.1:9000/v1/audio/transcriptions",
+        "model": "YOUR_STT_MODEL",
+        "auth": { "type": "none" }
+      }
+    }
   },
   "correction": { "enabled": false }
 }
 ```
 
-After editing the file, run **`/oaistt reload`**. This reloads dictation settings,
-not the extension code. It preserves temporary source overrides and does not
-reroute an operation already running. See the [configuration reference](docs/configuration.md)
-for explicit correction candidates, credentials, bounds and source saving.
+Then **`/oaistt reload`** applies pipeline settings to subsequent operations,
+resets the preferred profile, and lets active frozen work finish. Key/code changes
+require **full Pi `/reload`**, which cancels old operations.
 
-The recorder needs `parecord` and `pactl` (`pulseaudio-utils` on Debian-family
-systems) and an existing Pulse/PipeWire-Pulse connection. The default recording
-source must be an available, unmuted microphone—not a playback monitor.
+The recorder needs `pactl` and `parecord` (`pulseaudio-utils` on Debian-family
+systems) plus existing Pulse/PipeWire-Pulse access. The recording server's default
+must be an available, unmuted non-monitor source. The extension installs nothing
+and changes no host defaults, mute or volume. See [setup and bounds](docs/configuration.md).
 
-## Dictate
+## Controls
 
-1. Press **F8** or run **`/oaistt`** to start. Wait for **`● REC`** before speaking.
-2. Speak, then use the same control to stop. Wait for transcription/correction.
-3. Text is appended to your latest editor draft; you can keep typing while it
-   works. The existing draft is not corrected or replaced.
-4. Review the result and send it yourself. Dictation never sends or queues a prompt.
+| Default | Action |
+| --- | --- |
+| **F8** | Start recording; when recording, stop and use it |
+| **F7** | Correct the current whole draft, without recorder/STT |
+| **F12** | Cancel only oaistt |
+| **`/oaistt`** | Read-only help/status, never start |
 
-**`/oaistt cancel`** discards unfinished dictation. Pi's Escape remains its own
-agent-abort control. Submitting a prompt or requesting session/branch navigation
-before delivery also discards the unfinished result—even if navigation is later
-vetoed. Recording can run while the main agent is busy; processing toggles report
-phase instead of starting another operation.
+Keys are configurable; help shows active/pending mappings. Native cross-extension
+shortcut conflicts follow Pi's own warning/priority policy, not universal conflict
+detection. Escape remains Pi's main-agent control.
 
-Phase appears in a named footer status and a short widget above the editor, so a
-replacement footer need not hide recording feedback. Reload/shutdown clears both.
+Dictation: wait for **`● REC`**, speak, press F8, then wait for transcription and
+optional correction. You may keep typing; delivery appends to the latest draft,
+not the cursor, without changing existing text. Review and submit manually.
+Starting/processing/cleanup toggles report phase rather than restarting work.
 
-## Where your words go
+Manual F7 correction replaces the still-owned unchanged draft directly, undoably.
+Any actual typing/paste/attachment/programmatic edit cancels pending replacement,
+even edit-and-revert. Cursor/focus alone does not. Failure leaves your latest draft
+untouched; no restoration, preview or automatic submission. Identical output does
+not create an undo entry. Explicit F7 works even with automatic correction disabled.
+There is no typed draft-correction command or `/lazy` compatibility wrapper.
 
-The transcription server receives **audio**. Each attempted correction model in
-your explicit ordered list receives **the transcript and bounded conversation
-context**. Those providers may differ from Pi's main provider. There is no implicit
-fallback to Pi's current model or an unlisted provider. Correction is enabled by
-default, but the default candidate list is empty: raw text is inserted with one
-muted notice. Explicitly disabling correction suppresses that notice and request.
+Both paths share one operation. Prompt capture, session/editor replacement, full
+reload and explicit cancellation discard unfinished work. Recorder ownership stays
+held through teardown. Status plus an above-editor widget show progress even when a
+replacement footer omits extension statuses. Paste display may expand; semantic
+text/references are preserved. Editor replacement/reload may change editor history.
 
-For local-only use, choose a local transcription endpoint and only local correction
-models. Set `correction.context.maxChars` to `0` to omit conversation history.
-Direct tool results, images, thinking, shell output and custom messages are
-excluded, but ordinary text and summaries may still describe sensitive information.
-Exclusion is not redaction. Model correction can be wrong: review before sending.
+Long commands and exact aliases are in the [configuration reference](docs/configuration.md#commands).
 
-The extension keeps no audio/transcript/credential logs or pending-result archive.
-Temporary audio is deleted after completion or cancellation. Forced-stop artifacts
-are never uploaded. Cancellation cannot recall sent data; receiving providers'
-retention policies still apply. Uncatchable termination/host crashes can prevent
-best-effort temporary-file cleanup.
+## Where your data goes
 
-**Containers:** supply host-approved audio access yourself. A Pulse/PipeWire-Pulse
-socket can grant broad host audio access **and control**, not microphone-only
-permission. A read-only filesystem bind does not make that protocol read-only.
-The extension never mounts sockets, starts host services or changes host audio
-defaults, mute or volume. Local server access does not grant microphone access.
+The selected STT profile receives **audio**. Only enabling `automaticFallback`
+authorizes sequential upload to following active profiles; defining/listing them
+does not. A successful route becomes process-sticky, never automatically saved.
 
-## Development and evidence
+Each attempted correction provider receives **the target and bounded committed
+conversation history**. Manual F7 explicitly exposes the **unsent draft**. Providers
+may differ from the main agent. `$current` is an explicit start-frozen selector,
+never an implicit fallback; named tuning does not add candidates. For local-only
+use, choose local endpoints/models; `context.maxChars: 0` omits history.
 
-Use Node **22.19+**:
+Direct tools, images, thinking, shell and custom messages are excluded from history,
+but ordinary text/summaries/drafts may contain sensitive information. This is not
+redaction or a semantic prompt-injection guarantee. Review corrections before sending.
+
+Safe warning notices identify real failover transitions. Correction exhaustion
+inserts raw dictation with a muted notice; local invalid thinking gets a red error
+and guarded raw dictation. Manual failures never write. The optional
+`delivery.dictationMarker` is off by default and only prefixes a truly empty latest
+draft; it is not sent to the corrector or generated by F7.
+
+No audio/transcript/credential logs or pending-result archive are kept. Private audio
+is deleted on completion/cancellation; forced-stop artifacts are never uploaded.
+Cancellation cannot recall transmitted data or guarantee provider deletion. Crashes
+can prevent best-effort cleanup. Avoid raw provider/terminal tracing during validation.
+
+**Containers:** host-approved socket access can grant **broad host audio access and
+control**, not microphone-only permission. A read-only filesystem bind does not make
+that protocol read-only. The extension mounts no sockets or starts host services.
+Server networking is separate from microphone access.
+
+## Development and acceptance
+
+From a checkout, using Node 22.19+:
 
 ```sh
 npm ci --ignore-scripts
@@ -108,15 +135,10 @@ npm run check
 npm test
 ```
 
-Tests currently run on Node **26.10.0** with pinned Pi **0.99.2** fixtures. Pi modules
-are host-provided peers, not bundled runtime dependencies. The package remains
-private; no npm publication or v1 release is implied.
-
-[DEVELOPMENT.md](DEVELOPMENT.md) separates automated/API evidence from live checks.
-One owner-confirmed local dictation/draft/manual-submit check passed, with intact
-first/last words and correction disabled. Earlier playback-monitor diagnostics are
-**not microphone validation**. Use the [live checklist](docs/validation.md) for
-broader acceptance without retaining private test content.
+Dependencies are pinned for development; Pi peers are not bundled runtimes. The
+package remains private; no publication/release is implied. [Engineering evidence](DEVELOPMENT.md)
+separates current automated checks from historical v0.1 live observations. The
+[v0.2 live checklist](docs/validation.md) remains owner/tester-assisted work.
 
 ## License and attribution
 

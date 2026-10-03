@@ -6,8 +6,8 @@
  *
  * Author: thias <github.attic@typedef.net>, OpenAI Codex (gpt-6.1-sol)
  * License: MIT
- * Version: 0.1.0
- * Date: 2026-10-01
+ * Version: 0.2.0
+ * Date: 2026-10-03
  * Last verified with Pi: 0.99.2 (synthetic APIs)
  */
 
@@ -28,7 +28,7 @@ async function audio() {
   const path = join(dir, "fixture.wav"); const wav = fixtureWav(); await writeFile(path, wav, { mode: 0o600 });
   return { path, bytes: wav.length };
 }
-const settings = () => parseConfig({ transcription: { apiKeyEnv: null, model: "fixture-stt" } });
+const settings = () => parseConfig({ transcription: { order: ["openai"], profiles: { openai: { endpoint: "https://api.openai.com/v1/audio/transcriptions", model: "fixture-stt", auth: { type: "none" } } } } });
 
 test("real loopback multipart contains WAV/model/json/language only, explicit auth, no chat", async () => {
   const server = createServer();
@@ -51,9 +51,9 @@ test("real loopback multipart contains WAV/model/json/language only, explicit au
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const address = server.address(); assert.ok(address && typeof address === "object");
-    const config = settings(); config.transcription.endpoint = `http://127.0.0.1:${address.port}/v1/audio/transcriptions`;
-    config.transcription.language = "de";
-    config.transcription.apiKeyEnv = "FIXTURE_STT_KEY";
+    const config = settings(); config.transcription.profiles.openai!.endpoint = `http://127.0.0.1:${address.port}/v1/audio/transcriptions`;
+    config.transcription.profiles.openai!.language = "de";
+    config.transcription.profiles.openai!.auth = { type: "env", name: "FIXTURE_STT_KEY" };
     assert.equal(await transcribe(await audio(), config, new AbortController().signal, "synthetic-fixture-value"), "synthetic result");
     assert.equal(calls, 1);
   } finally { await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve())); }
@@ -106,7 +106,7 @@ test("invalid/incomplete/silent/changed WAV never starts a request", async () =>
 
 test("cancellation and deadline settle despite a fetch implementation ignoring signal", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const file = await audio(); const config = settings(); config.transcription.timeoutSeconds = 1;
+  const file = await audio(); const config = settings(); config.transcription.profiles.openai!.attemptTimeoutSeconds = 1;
   const parent = new AbortController();
   let started!: () => void; const requested = new Promise<void>((resolve) => { started = resolve; });
   let owned!: AbortSignal;
@@ -124,7 +124,26 @@ test("missing or inconsistent auth is refused before file access/request", async
     let calls = 0;
     await assert.rejects(transcribe({ path: "/nonexistent-synthetic.wav", bytes: 100 }, config,
       new AbortController().signal, key, async () => { calls++; return new Response('{}'); }),
-    (error: unknown) => error instanceof Error && /credential unavailable/.test(error.message) && !error.message.includes("synthetic"));
+    (error: unknown) => error instanceof Error && /credentials unavailable/.test(error.message) && !error.message.includes("synthetic"));
     assert.equal(calls, 0);
   }
+});
+
+test("same prepared WAV survives failover with fresh multipart bodies and no credential inheritance", async () => {
+  const { prepareAudio, transcriptionChain, TranscriptionFailure } = await import("../src/transcription.ts");
+  const file = await audio(), config = parseConfig({ transcription: { order: ["local", "remote"], automaticFallback: true, profiles: {
+    local: { endpoint: "http://127.0.0.1:1/local", model: "local", auth: { type: "none" } },
+    remote: { endpoint: "http://127.0.0.1:1/remote", model: "remote", auth: { type: "env", name: "SYNTHETIC_REMOTE_KEY" } },
+  } } });
+  const bytes = await prepareAudio(file, config), bodies: FormData[] = [];
+  const fetcher: typeof fetch = async (_url, options) => {
+    const body = options!.body as FormData; bodies.push(body);
+    assert.deepEqual(Buffer.from(await (body.get("file") as Blob).arrayBuffer()), fixtureWav());
+    if (bodies.length === 1) { assert.deepEqual(options!.headers, {}); return new Response("{}", { status: 503 }); }
+    assert.deepEqual(options!.headers, { Authorization: "Bearer synthetic-only" }); return new Response('{"text":"synthetic"}');
+  };
+  const result = await transcriptionChain(config, "local", new AbortController().signal, (profile, signal) =>
+    transcribe(file, config, signal, profile.auth.type === "none" ? undefined : "synthetic-only", fetcher, profile, bytes));
+  assert.equal(result.profile, "remote"); assert.equal(bodies.length, 2); assert.notEqual(bodies[0], bodies[1]);
+  assert.equal(bodies[0]!.get("model"), "local"); assert.equal(bodies[1]!.get("model"), "remote");
 });
