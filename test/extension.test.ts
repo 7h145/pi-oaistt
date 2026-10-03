@@ -33,15 +33,18 @@ const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
 function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean;
-  store?: Dependencies["store"]; nativeFeedback?: boolean; attempt?: Dependencies["transcribe"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
+  store?: Dependencies["store"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
-    mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings });
+    mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings, notifications: options.nativeNotifications });
   const notices: string[] = [];
   const categories: string[] = [];
   const statuses = new Map<string, string | undefined>();
   const widgets = new Map<string, string[] | undefined>();
   const ui = { ...native.ui,
-    notify: (text: string, category = "info") => { categories.push(category); notices.push(text.replace(/\x1b\[[0-9;]*m/g, "")); },
+    notify: (text: string, category: "info" | "warning" | "error" = "info") => {
+      categories.push(category); notices.push(text.replace(/\x1b\[[0-9;]*m/g, ""));
+      if (options.nativeNotifications) native.ui.notify(text, category);
+    },
     setStatus: (key: string, value: string | undefined) => {
       statuses.set(key, value); if (options.nativeFeedback) native.ui.setStatus(key, value);
     },
@@ -526,4 +529,81 @@ test("nontui metadata tool may lazily load config but never initializes audio/ed
   const h = harness({ mode: "rpc" }); await h.start(); assert.equal(h.counts().loads, 0);
   await h.tools.get("oaistt_profiles").execute("test", {}, new AbortController().signal, undefined, h.ctx);
   assert.equal(h.counts().loads, 1); assert.equal(h.counts().captures, 0); assert.equal(h.ui.getEditorComponent(), undefined);
+});
+
+for (const fullscreen of [false, true]) test(`help survives native info coalescing (${fullscreen ? "fullscreen" : "regular"})`, async () => {
+  const h = harness({ fullscreen, nativeNotifications: true }); await h.start();
+  h.ui.setEditorText("PRIVATE_SYNTHETIC_DRAFT");
+  const entries = h.ctx.sessionManager.getEntries().length, counts = h.counts();
+  for (const args of ["help", "h"]) {
+    h.notices.length = 0; await h.command(args);
+    const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    assert.match(rendered, /dictation toggle/); assert.match(rendered, /recorder sources/);
+    assert.match(rendered, /transcription source NAME/); assert.match(rendered, /Defaults/);
+    assert.match(rendered, /Active keys/); assert.match(rendered, /oaistt: idle/);
+    assert.equal(h.notices.length, 1);
+    assert.doesNotMatch(rendered, /PRIVATE_SYNTHETIC_DRAFT|https:|endpoint|OPENAI_API_KEY/);
+    for (const width of [40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
+  }
+  h.notices.length = 0; await h.command("");
+  assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt help/); assert.match(h.notices[0]!, /oaistt: idle/);
+  assert.ok(h.notices[0]!.length < 1000); assert.equal(h.controller.active, false);
+  assert.equal(h.ui.getEditorText(), "PRIVATE_SYNTHETIC_DRAFT");
+  assert.deepEqual(h.counts(), counts); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
+  assert.equal(h.promptCalls.length, 0); assert.equal(h.main.signal.aborted, false);
+  assert.equal(h.ctx.sessionManager.getEntries().length, entries);
+});
+
+test("help shows actual disabled/rebound controls and pending keys in one native-visible response", async () => {
+  const h = harness({ nativeNotifications: true, bindings: { "app.model.select": "f6" } });
+  h.setConfig(parseConfig({ keybindings: { "dictation.toggle": "f9", "editor.correct": "f6", "operation.cancel": [] } }));
+  await h.start(); h.notices.length = 0; await h.command("help");
+  const help = h.notices[0]!;
+  assert.equal(h.notices.length, 1);
+  assert.match(help, /dictation.toggle.*default: f8.*active: f9/);
+  assert.match(help, /editor.correct.*default: f7.*active: unbound/);
+  assert.match(help, /operation.cancel.*default: f12.*active: unbound/);
+  h.setConfig(parseConfig({ keybindings: { "dictation.toggle": "f10" } }));
+  await h.command("reload");
+  for (const args of ["help", "", "status", "s"]) {
+    h.notices.length = 0; await h.command(args);
+    const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    assert.equal(h.notices.length, 1);
+    assert.match(rendered, /Active keys: dictation.toggle=f9/);
+    assert.match(rendered, /Configured\/pending keys: dictation.toggle=f10/);
+    assert.match(rendered, /Full Pi \/reload required/);
+  }
+  h.notices.length = 0; await h.command("--help");
+  assert.equal(h.notices.length, 1); assert.equal(h.categories.at(-1), "error");
+  assert.match(h.notices[0]!, /Defaults: F8 dictation toggle/);
+  assert.equal(h.controller.active, false); assert.equal(h.counts().captures, 0);
+});
+
+for (const kind of ["dictation", "manual"] as const) test(`help/status during ${kind} is read-only and preserves active ownership`, async () => {
+  const h = harness({ nativeNotifications: true, streaming: true }); await h.start();
+  h.ui.setEditorText("synthetic draft"); if (kind === "dictation") h.f8(); else h.f7(); await nextTask();
+  const counts = h.counts(), entries = h.ctx.sessionManager.getEntries().length;
+  for (const args of ["", "help", "h", "status", "s"]) {
+    await h.command(args);
+    assert.equal(h.controller.kind, kind); assert.equal(h.signals[0]!.aborted, false);
+    assert.match(h.notices.at(-1)!, kind === "dictation" ? /recording \(dictation\)/ : /correcting \(manual\)/);
+    assert.equal(h.ui.getEditorText(), "synthetic draft");
+  }
+  assert.deepEqual(h.counts(), counts); assert.equal(h.main.signal.aborted, false);
+  assert.equal(h.ctx.sessionManager.getEntries().length, entries); assert.equal(h.promptCalls.length, 0);
+});
+
+test("status-only output omits command help; extra help/status arguments stay invalid", async () => {
+  const h = harness({ nativeNotifications: true }); await h.start();
+  for (const args of ["status", "s"]) {
+    h.notices.length = 0; await h.command(args);
+    assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt: idle/);
+    assert.match(h.notices[0]!, /Next recorder: server default/);
+    assert.doesNotMatch(h.notices[0]!, /command help|dictation toggle|Defaults:/);
+  }
+  for (const args of ["help extra", "h extra", "status extra", "s extra"]) {
+    h.notices.length = 0; await h.command(args);
+    assert.equal(h.notices.length, 1); assert.equal(h.categories.at(-1), "error");
+  }
+  assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0);
 });

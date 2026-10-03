@@ -204,7 +204,12 @@ from manual F7, and is not tracked or rewritten after insertion.
 
 ## Commands
 
-Bare `/oaistt` is help/status. Only these long forms/exact aliases are supported:
+Bare `/oaistt` shows concise help/status. `/oaistt help` lists commands and
+exact aliases, default/active controls, pending bindings and safe usage.
+`/oaistt status` reports the operation and next recorder/profile selection.
+Each response is one UI-only notification so Pi's consecutive-info coalescing
+cannot hide help or pending-key details. Only these long forms/exact aliases
+are supported:
 
 | After `/oaistt` | Alias |
 | --- | --- |

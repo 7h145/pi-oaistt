@@ -22,7 +22,7 @@ Owner authorized implementation after the umbrella plan readback. Local annotate
 
 Public safety gate committed as `403b838` before broad implementation. The revised
 schema, shared dictation/manual controller, correction/STT chains, profile service,
-commands/tools/keys and marker are now implemented. **285/285 synthetic tests and
+commands/tools/keys and marker are now implemented. **291/291 synthetic tests and
 TypeScript check pass** on Pi 0.99.2 / Node 26.10.0. No microphone, real credentials
 or external provider were used. Existing recorder fixtures spawn only synthetic
 Node children; native compatible payload fixtures explicitly disable HTTP.
@@ -57,6 +57,25 @@ no private configuration, recordings or bundled Pi runtime. Asynchronous complet
 checks also revalidate editor ownership before either chain's next request, not
 merely on the UI timer or final delivery. Monotonic expiry rejects CPU-starved late
 success and includes WAV preparation/context work in chain budgets.
+
+### Follow-up: visible help/status output
+
+Owner reported missing command help. Source inspection and red native-rendering
+regressions found that Pi 0.99.2's `showStatus()` replaces consecutive informational
+notices: the separate status/pending-key calls hid the previously emitted help.
+An accumulating notification spy alone did not reproduce visible behavior.
+
+Each help/status response now emits one composed public notification. Bare root
+keeps concise help/status; `help`/`h` lists commands/exact aliases, default/active
+controls and pending mappings; `status`/`s` reports state without the command list.
+Settings reload also composes its confirmation and state. `--help` and invalid
+arguments remain unchanged; no spec edit or alias addition.
+
+Six new regressions exercise native notification/coalescing/rendering in regular/
+fullscreen layouts and widths 40/80/120, disabled/rebound/pending controls, aliases,
+state-only output and active dictation/manual ownership. No draft/config leakage,
+editor write, model/recorder request, main-agent action or session entry. Typecheck
+and all 291 synthetic tests pass. Live user confirmation after reload is pending.
 
 ### Acceptance still pending
 

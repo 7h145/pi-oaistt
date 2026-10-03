@@ -91,6 +91,7 @@ interface NativeModeFixture {
   widgetContainerAbove: InstanceType<typeof Container>;
   widgetContainerBelow: InstanceType<typeof Container>;
   footerContainer: InstanceType<typeof Container>;
+  chatContainer: InstanceType<typeof Container>;
   editorComponentFactory?: unknown;
   pendingUserInputs: string[];
   compactionQueuedMessages: { text: string; mode: string }[];
@@ -111,6 +112,7 @@ export function createPiUI(options: {
   streaming?: boolean;
   compacting?: boolean;
   bindings?: KeybindingsConfig;
+  notifications?: boolean;
   prompt?: NativeSession["prompt"];
 } = {}) {
   initTheme("dark", false);
@@ -136,6 +138,7 @@ export function createPiUI(options: {
   mode.runtimeHost = { session };
   mode.ui = tui;
   mode.keybindings = keybindings;
+  mode.chatContainer = new Container();
   mode.editorContainer = new Container();
   mode.statusContainer = new Container();
   mode.widgetContainerAbove = new Container();
@@ -166,13 +169,14 @@ export function createPiUI(options: {
   mode.setWorkingIndicator = () => {}; mode.setHiddenThinkingLabel = () => {};
   mode.flushPendingBashComponents = () => {};
   mode.updatePendingMessagesDisplay = () => {};
-  mode.showStatus = () => {};
+  if (!options.notifications) mode.showStatus = () => {};
   mode.setupEditorSubmitHandler();
   const followUps: Promise<void>[] = [];
   mode.defaultEditor.onAction("app.message.followUp", () => {
     followUps.push(mode.handleFollowUp());
   });
   mode.editorContainer.addChild(mode.editor);
+  if (options.notifications) tui.addChild(mode.chatContainer);
   tui.addChild(mode.widgetContainerAbove);
   tui.addChild(mode.editorContainer);
   tui.addChild(mode.widgetContainerBelow);
