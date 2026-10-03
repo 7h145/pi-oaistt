@@ -270,3 +270,44 @@ test("classification handles exact controls, arguments, templates and malformed 
 test("installed editor is DictationEditor", () => {
   assert.equal(fixture().mode.editor instanceof DictationEditor, true);
 });
+
+for (const mode of ["regular", "fullscreen"] as const) {
+  test(`${mode}: semantic revisions are eager across typing/paste/set/undo and edit-revert`, () => {
+    const h = createPiUI({ mode, streaming: true }); open.push(h);
+    let pending = false, cancellations = 0, callbacks = 0;
+    const boundary = installEditorBoundary(h.pi as Pick<ExtensionAPI, "getCommands">,
+      { ui: h.ui, isIdle: h.isIdle }, () => {}, () => { if (pending) { pending = false; cancellations++; } });
+    h.mode.editor.onChange = () => { callbacks++; };
+    h.ui.setEditorText("  @src/synthetic.ts\n/tmp/synthetic.png\n");
+    h.ui.pasteToEditor("synthetic pasted line\n".repeat(15));
+    const before = h.ui.getEditorText(), visible = h.mode.editor.getText();
+    const revision = boundary.revision();
+    pending = true; h.terminal.send("x");
+    assert.equal(pending, false); assert.equal(cancellations, 1);
+    h.terminal.send("\x1f"); assert.equal(h.ui.getEditorText(), before);
+    assert.ok(boundary.revision() > revision);
+    const lease = new DraftLease();
+    assert.equal(lease.replace(h.ui, before, before.replace("@src/", "@lib/"), boundary.isInstalled), true);
+    h.terminal.send("\x1f");
+    assert.equal(h.ui.getEditorText(), before); assert.equal(h.mode.editor.getText(), visible);
+    const same = boundary.revision(); h.terminal.send("\x1b[D"); h.showDialog();
+    assert.equal(boundary.revision(), same); // Cursor/focus do not change ownership.
+    h.ui.setEditorText(before); assert.equal(boundary.revision(), same);
+    pending = true; h.ui.pasteToEditor("/tmp/another-synthetic.png");
+    assert.equal(pending, false); assert.equal(cancellations, 2);
+    pending = true; h.ui.setEditorText("programmatic"); h.ui.setEditorText(before);
+    assert.equal(pending, false); assert.equal(cancellations, 3); assert.ok(callbacks > 3);
+    const writes: string[] = [];
+    assert.equal(new DraftLease().replace({ getEditorText: () => before, setEditorText: t => writes.push(t) },
+      before, before, () => true), true); assert.deepEqual(writes, []);
+  });
+}
+
+test("marker is strict-empty, same undo transaction, never whitespace or reference emptiness", () => {
+  for (const draft of ["", " ", "\n", "/tmp/synthetic.png", "@src/synthetic.ts"]) {
+    const h = fixture(); h.ui.setEditorText(draft);
+    assert.equal(h.lease.append(h.ui, "spoken", h.boundary.isInstalled, true), true);
+    assert.equal(h.ui.getEditorText().startsWith("this is dictated\n\n"), draft === "");
+    h.terminal.send("\x1f"); assert.equal(h.ui.getEditorText(), draft);
+  }
+});

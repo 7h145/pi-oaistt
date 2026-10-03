@@ -13,6 +13,32 @@ The approved implementation handoff supplied by the owner remains the product
 contract. The v1 target is not a claim of completed functionality or release
 readiness. No external reference implementation has been copied into this code.
 
+## v0.2.0 work in progress
+
+Owner authorized implementation after the umbrella plan readback. Local annotated
+`v0.1.0` points to `8ddb5a9`; no push/release. Target contract is Pathfinder
+`59c3521`. Private v0.1 settings are deliberately not migrated automatically.
+
+Step 1 (synthetic native API gate): typecheck and **202/202** tests pass.
+New public `onChange` observation proves synchronous semantic revisions through
+programmatic setters, typing, paste and undo/edit-and-revert while preserving Pi's
+assigned downstream callback. Cursor/focus and identical semantic setters do not
+advance revisions. Whole-draft replacement and marker use the same public setter's
+undo transaction; expanded paste maps and synthetic path/image references survive
+undo in regular/fullscreen busy fixtures. Identical replacement does not write.
+
+Public Pi AI supported-level helpers distinguish nonreasoning/off, standard
+reasoning, unsupported null entries and opt-in max. Registry/faux requests and a
+network-disabled native compatible-adapter payload fixture prove omitted reasoning
+and mapped low. Explicit off is represented by omitted `reasoning`, after validating
+support, **not** an invalid off cast. Native shortcut setup captures its map; source
+inspection confirms full reload resets the old callback before new setup. Tests
+isolate that reset (not a complete InteractiveMode reload integration).
+
+Not yet proved: actual F7/controller integration, all thinking payload variants,
+complete reload/conflict lifecycle and live clipboard/hardware/provider acceptance.
+The new replacement/marker primitives are not yet wired to user controls.
+
 ## First feasibility gate: editor capture and delivery
 
 Source inspected: Pi 0.99.2 public declarations/examples and installed

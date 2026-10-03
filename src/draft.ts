@@ -25,10 +25,23 @@ export class DraftLease {
     return this.#valid;
   }
 
+  /** Whole semantic draft, unchanged ownership; identical output consumes no undo. */
+  replace(
+    ui: Pick<ExtensionUIContext, "getEditorText" | "setEditorText">,
+    original: string, text: string, isCurrent: () => boolean,
+  ): boolean {
+    if (!text.trim() || !this.#valid || !isCurrent()) return false;
+    if (ui.getEditorText() !== original) return false;
+    this.#valid = false; // Our onChange must not invalidate a delivered result.
+    if (text !== original) ui.setEditorText(text);
+    return true;
+  }
+
   append(
     ui: Pick<ExtensionUIContext, "getEditorText" | "setEditorText">,
     text: string,
     isCurrent: () => boolean,
+    marker = false,
   ): boolean {
     const transcript = text.trim();
     if (!transcript || !this.#valid || !isCurrent()) return false;
@@ -37,7 +50,7 @@ export class DraftLease {
     this.#valid = false;
     const draft = ui.getEditorText();
     const separator = draft && !/\s$/u.test(draft) ? " " : "";
-    ui.setEditorText(draft + separator + transcript);
+    ui.setEditorText(draft + separator + (marker && draft === "" ? "this is dictated\n\n" : "") + transcript);
     return true;
   }
 }

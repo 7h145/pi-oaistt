@@ -62,6 +62,8 @@ export function isPromptCapture(
 export interface CaptureHooks {
   /** Synchronous invalidation only. Must not await cleanup at this boundary. */
   captured(): void;
+  /** Semantic content changes, synchronously, including programmatic edits/undo. */
+  changed?(): void;
   extensionCommands(): readonly string[];
   /** Used only to classify native follow-up routing, NOT to gate dictation. */
   followUpUsesSubmit(): boolean;
@@ -84,6 +86,20 @@ export class DictationEditor extends CustomEditor {
     super(tui, theme, keybindings);
     this.#hooks = hooks;
     this.#initialText = initialText;
+    // Public callback assignment stays intact even when Pi wires it after the
+    // factory. Observe expanded semantics before forwarding the native callback.
+    let previous = this.getExpandedText();
+    let downstream = this.onChange;
+    const changed = (text: string) => {
+      const current = this.getExpandedText();
+      if (current !== previous) { previous = current; this.#hooks.changed?.(); }
+      downstream?.(text);
+    };
+    Object.defineProperty(this, "onChange", {
+      configurable: true,
+      get: () => changed,
+      set: (callback: typeof this.onChange) => { if (callback !== changed) downstream = callback; },
+    });
   }
 
   override setText(text: string): void {
@@ -132,6 +148,8 @@ export class DictationEditor extends CustomEditor {
 
 export interface EditorBoundary {
   isInstalled(): boolean;
+  revision(): number;
+  nativeBindings(): Record<string, string | string[] | undefined>;
   dispose(): void;
 }
 
@@ -140,22 +158,28 @@ export function installEditorBoundary(
   pi: Pick<ExtensionAPI, "getCommands">,
   ctx: Pick<ExtensionContext, "ui" | "isIdle">,
   captured: () => void,
+  changed: () => void = () => {},
 ): EditorBoundary {
   const { ui } = ctx;
   if (ui.getEditorComponent()) {
     throw new Error("Dictation requires the stock Pi editor; another editor is installed.");
   }
+  let revision = 0;
+  let bindings: KeybindingsManager | undefined;
   const factory = (tui: TUI, theme: EditorTheme, kb: KeybindingsManager) =>
-    new DictationEditor(tui, theme, kb, {
+    (bindings = kb, new DictationEditor(tui, theme, kb, {
       captured,
+      changed: () => { revision++; changed(); },
       extensionCommands: () => pi.getCommands()
         .filter((command) => command.source === "extension")
         .map((command) => command.name),
       followUpUsesSubmit: () => ctx.isIdle(),
-    }, ui.getEditorText());
+    }, ui.getEditorText()));
   ui.setEditorComponent(factory);
   return {
     isInstalled: () => ui.getEditorComponent() === factory,
+    revision: () => revision,
+    nativeBindings: () => bindings?.getResolvedBindings() ?? {},
     dispose: () => {
       if (ui.getEditorComponent() !== factory) return;
       // Restore through expanded text for the same reason as first hydration.
