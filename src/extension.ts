@@ -278,10 +278,12 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
   function statusText(ctx: ExtensionContext): string {
     const config = selection.config;
     const label = (key: string) => ctx.ui.theme.style(`${key}:`, { fg: "accent", bold: true });
-    const row = (key: string, value: string) => `${label(key)}${" ".repeat(Math.max(1, 15 - key.length - 1))}${value}`;
+    const row = (key: string, value: string) => `${label(key)}${" ".repeat(Math.max(1, 16 - key.length - 1))}${value}`;
     // Preview next-operation policy, not the active attempt or proven availability.
     // Only inspect the main identity when explicitly authorized by $current.
     const fallback = config ? config.transcription.automaticFallback ? "on" : "off" : "unavailable";
+    const activeSource = controller.captureSource;
+    const source = activeSource === undefined ? config?.recorder.source : activeSource;
     const model = config?.correction.order.includes("$current") ? ctx.model : undefined;
     const models = config?.correction.order.map(selector => selector === "$current"
       ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})`
@@ -291,7 +293,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       "",
       row("Transcription", `active: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}; fallback: ${fallback}.`),
       row("Correction", config ? `automatic ${config.correction.automatic ? "on" : "off"}; next order: ${models}.` : "unavailable."),
-      row("Recorder", config ? `next capture: ${config.recorder.source ? "configured source override" : "server default source"}.` : "unavailable."),
+      row("Capture device", `${source === undefined ? "unavailable" : source === null ? "server default source" : safeLabel(source)}.`),
       row("Active keys", `${bindingsLabel(activeBindings)}.`),
     ];
     if (config && JSON.stringify(config.keybindings) !== JSON.stringify(registeredBindings)) lines.push(

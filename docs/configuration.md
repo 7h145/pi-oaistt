@@ -241,16 +241,20 @@ from manual F7, and is not tracked or rewritten after insertion.
 Bare `/oaistt` shows concise help/status. `/oaistt help` lists commands and
 exact aliases, default/active controls, pending bindings and safe usage.
 `/oaistt status` uses aligned, theme-accented bold labels, ordered as
-Transcription, Correction, Recorder, and Active keys. Transcription separates the
+Transcription, Correction, Capture device, and Active keys. Transcription separates the
 active operation's profile from the next selection and saved default; its brief
 `fallback: on/off` field reports transcription-profile failover.
 Correction shows automatic mode and the configured next-operation model order;
 `$current` includes the main model identity at display time, not a claim about
 an active attempt or registry/backend availability. Only an explicitly listed
 `$current` permits reading that identity. Status never probes models or credentials.
-Recorder reports the next capture's server default source or
-configured override, without disclosing source names. Active work retains its
-frozen settings and model identity even when next selections change.
+Capture device shows the selected PA source name, or `server default source`.
+During owned dictation it shows that operation's frozen source selection, not a
+newly changed setting; otherwise it shows the current selection. Names are
+control-stripped and length-bounded, without querying audio or dumping device
+properties. The default label describes server-default selection, not a probe of
+the resolved physical device. Active work retains its frozen settings and model
+identity even when selections change.
 
 Each response is one UI-only notification so Pi's consecutive-info coalescing
 cannot hide help or pending-key details. Only these long forms/exact aliases

@@ -102,6 +102,10 @@ export class OperationController {
   get phase(): Phase { return this.#active?.phase ?? "idle"; }
   get kind(): OperationKind | undefined { return this.#active?.kind; }
   get active(): boolean { return this.#active !== undefined; }
+  /** Frozen source selection for owned dictation; null means server default. */
+  get captureSource(): string | null | undefined {
+    return this.#active?.kind === "dictation" ? this.#active.config.recorder.source : undefined;
+  }
   toggle(config: Config, owner: DeliveryOwner, pipeline = this.#pipeline): void {
     if (this.#active) { if (this.phase === "recording") this.stop(owner); else this.#busy(owner); return; }
     this.start(config, owner, pipeline);

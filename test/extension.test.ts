@@ -231,7 +231,7 @@ test("editor factory takeover is not undone; owned capture is discarded and feed
   assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
 });
 
-test("temporary source/reloaded settings cannot change active operation; status/help echo no values", async () => {
+test("temporary source/reloaded settings cannot change active operation or its displayed capture device", async () => {
   const h = harness(); await h.start(); await h.command("dictation toggle"); await nextTask();
   await h.command("recorder source synthetic-new-source"); await h.command("status"); await h.command("help");
   assert.equal(h.settings[0]!.recorder.source, null);
@@ -607,7 +607,7 @@ test("status-only output omits command help; extra help/status arguments stay in
   for (const args of ["status", "s"]) {
     h.notices.length = 0; await h.command(args);
     assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt: idle/);
-    assert.match(h.notices[0]!, /Recorder:\s+next capture: server default source/);
+    assert.match(h.notices[0]!, /Capture device:\s+server default source/);
     assert.doesNotMatch(h.notices[0]!, /command help|dictation toggle|Defaults:/);
   }
   for (const args of ["help extra", "h extra", "status extra", "s extra"]) {
@@ -676,11 +676,11 @@ for (const fullscreen of [false, true]) test(`status has ordered styled labels, 
     assert.match(text, /Transcription:\s+active: none; next: local; default: local; fallback: on/);
     assert.match(text, /Correction:\s+automatic on; next order: fixture\/first → \$current \(fixture\/main\) → fixture\/last\/slashed\/語/);
     assert.doesNotMatch(text, /^Fallback:/m);
-    assert.match(text, /Recorder:\s+next capture: server default source/);
-    const keys = ["Transcription", "Correction", "Recorder", "Active keys"];
+    assert.match(text, /Capture device:\s+server default source/);
+    const keys = ["Transcription", "Correction", "Capture device", "Active keys"];
     const rows = text.split("\n").filter(line => keys.some(key => line.startsWith(`${key}:`)));
     assert.deepEqual(rows.map(line => line.split(":")[0]), keys);
-    assert.ok(rows.every(line => line.match(/^[^:]+:\s+/u)![0].length === 15));
+    assert.ok(rows.every(line => line.match(/^[^:]+:\s+/u)![0].length === 16));
     assert.doesNotMatch(text, /EXCLUDED_SYNTHETIC_DRAFT|https?:|OPENAI_API_KEY|Active STT|selectors/);
     for (const key of keys) {
       const prefix = h.ui.theme.style(`${key}:`, { fg: "accent", bold: true }).split(`${key}:`)[0]!;
@@ -695,17 +695,17 @@ for (const fullscreen of [false, true]) test(`status has ordered styled labels, 
   assert.equal(h.ctx.sessionManager.getEntries().length, entries); assert.equal(h.main.signal.aborted, false);
 });
 
-test("status distinguishes disabled fallback and recorder override without disclosing the source", async () => {
+test("status shows the selected capture device alongside disabled transcription fallback", async () => {
   const h = harness();
-  h.setConfig(parseConfig({ recorder: { source: "EXCLUDED_SYNTHETIC_SOURCE" }, transcription: {
+  h.setConfig(parseConfig({ recorder: { source: "fixture.capture.source" }, transcription: {
     ...profilesConfig().transcription, automaticFallback: false,
   } }));
   await h.start(); await h.command("status");
   assert.match(h.notices.at(-1)!, /Transcription:.*fallback: off/);
   assert.doesNotMatch(h.notices.at(-1)!, /^Fallback:/m);
-  assert.match(h.notices.at(-1)!, /Recorder:\s+next capture: configured source override/);
+  assert.match(h.notices.at(-1)!, /Capture device:\s+fixture\.capture\.source/);
   assert.match(h.notices.at(-1)!, /Correction:\s+automatic on; next order: none \(no requests\)/);
-  assert.doesNotMatch(h.notices.at(-1)!, /EXCLUDED_SYNTHETIC_SOURCE/);
+  assert.doesNotMatch(h.notices.at(-1)!, /Recorder:|next capture:/);
 });
 
 test("status does not read the main model unless $current is explicitly configured", async () => {
@@ -723,7 +723,7 @@ test("status marks missing current model and unavailable config without claiming
   assert.match(h.notices.at(-1)!, /Config: unavailable/);
   assert.match(h.notices.at(-1)!, /Correction:\s+unavailable/);
   assert.match(h.notices.at(-1)!, /Transcription:.*fallback: unavailable/);
-  assert.match(h.notices.at(-1)!, /Recorder:\s+unavailable/);
+  assert.match(h.notices.at(-1)!, /Capture device:\s+unavailable/);
   assert.doesNotMatch(h.notices.at(-1)!, /automatic off|server default source/);
 });
 
@@ -757,4 +757,43 @@ test("status labels use the current theme on each request", async () => {
   const prefix = h.ui.theme.style("Transcription:", { fg: "accent", bold: true }).split("Transcription:")[0]!;
   assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}Transcription:`));
   assert.notEqual(h.styledNotices.at(-1), before);
+});
+
+for (const initial of [null, "fixture.capture.first"]) test(`capture device status keeps frozen dictation source: ${initial ?? "default"}`, async () => {
+  const h = harness(); h.config.recorder.source = initial;
+  await h.start(); h.f8(); await nextTask();
+  assert.equal(h.controller.captureSource, initial);
+  await h.command("recorder source fixture.capture.second");
+  for (const args of ["status", "help", ""]) {
+    await h.command(args);
+    assert.ok(h.notices.at(-1)!.includes(initial ?? "server default source"));
+    assert.doesNotMatch(h.notices.at(-1)!, /fixture\.capture\.second/);
+  }
+  h.selection.reset(); await h.command("status"); // Failed reload must not hide owned capture metadata.
+  assert.match(h.notices.at(-1)!, /Config: unavailable/);
+  assert.ok(h.notices.at(-1)!.includes(initial ?? "server default source"));
+  await h.command("reload");
+  await h.command("cancel"); await h.controller.settled();
+  assert.equal(h.controller.captureSource, undefined);
+  await h.command("status");
+  assert.match(h.notices.at(-1)!, /Capture device:\s+fixture\.capture\.second/);
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+});
+
+test("capture device status uses selected settings during manual correction, without capture or probing", async () => {
+  const h = harness({ sources: async () => { throw new Error("status must not query audio"); } });
+  h.config.recorder.source = "fixture.capture.first";
+  await h.start(); h.ui.setEditorText("synthetic draft"); h.f7(); await nextTask();
+  assert.equal(h.controller.captureSource, undefined);
+  await h.command("recorder source fixture.capture.second"); await h.command("status");
+  assert.match(h.notices.at(-1)!, /Capture device:\s+fixture\.capture\.second/);
+  assert.equal(h.counts().captures, 0);
+  await h.command("cancel"); await h.controller.settled();
+});
+
+test("capture device labels are control-stripped and bounded", async () => {
+  const h = harness(); h.config.recorder.source = `fixture\x1b\x07\u202e${"x".repeat(100)}`;
+  await h.start(); await h.command("status");
+  const line = h.notices.at(-1)!.split("\n").find(line => line.startsWith("Capture device:"))!;
+  assert.equal(line, `Capture device: fixture${"x".repeat(57)}.`);
 });

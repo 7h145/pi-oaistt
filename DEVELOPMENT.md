@@ -138,16 +138,19 @@ expose bounded selection metadata, not audio, drafts, endpoints or credentials;
 non-TUI metadata does not enable recording or editor access.
 
 Status uses aligned, bold theme-accented labels: Transcription, Correction,
-Recorder, then Active keys. Transcription includes its own brief fallback switch.
+Capture device, then Active keys. Transcription includes its own brief fallback switch.
 Correction displays the configured next-operation order and resolves an explicitly
 listed `$current` to the main identity at display time, without registry/auth
 probes. This is a policy preview, not a live-attempt/availability claim; active
-work retains its frozen identity. Missing configuration reports unavailable,
-recorder source names remain undisclosed, and theme styling is computed on request.
+work retains its frozen identity. Capture device exposes only the bounded,
+control-stripped selected PA source name, or the server-default selection label.
+Owned dictation uses its frozen source even after settings change or fail to reload;
+idle/manual status uses current settings. No audio query is made. Missing state
+reports unavailable, and theme styling is computed on request.
 
 ## Automated evidence
 
-**390 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
+**394 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
 22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
 verified unchanged tested-source/documentation hashes before commit.
 
