@@ -322,3 +322,53 @@ for (const [index, { reason, response }] of diagnosticCases.entries()) {
     assert.equal(h.calls.length, 2);
   });
 }
+
+for (const api of ["openai-codex-responses", "anthropic-messages", "openai-completions"] as const) {
+  for (const temperature of [null, 0, 0.6]) {
+    test(`correction sampling option: ${api}, temperature=${temperature}`, async () => {
+      const h = registryFixture([fauxAssistantMessage("corrected synthetic")]);
+      h.config = parseConfig({ correction: { order: ["fixture/one"], defaults: { temperature } } });
+      const find = h.registry.find;
+      h.registry.find = (provider, id) => {
+        const model = find(provider, id);
+        return model ? { ...model, api } : model;
+      };
+      const stream = h.registry.streamSimple;
+      h.registry.streamSimple = (model, context, options) => {
+        if (temperature === null) assert.equal(Object.hasOwn(options!, "temperature"), false);
+        else assert.equal(options!.temperature, temperature);
+        assert.equal(options!.maxTokens, Math.min(4096, model.maxTokens));
+        assert.equal(options!.cacheRetention, "none");
+        return stream(model, context, options);
+      };
+      assert.deepEqual(await correct("raw synthetic", h.config, new AbortController().signal, session(), h.registry),
+        { kind: "corrected", text: "corrected synthetic" });
+      assert.equal(h.calls.length, 1);
+    });
+  }
+}
+
+for (const current of [false, true]) {
+  test(`correction temperature overrides resolve actual identity and clear inheritance: current=${current}`, async () => {
+    const h = registryFixture(["throw", fauxAssistantMessage("corrected synthetic")]);
+    h.config = parseConfig({ correction: {
+      order: [current ? "$current" : "fixture/one", "fixture/two/slashed"],
+      defaults: { temperature: 0.6 },
+      modelSettings: { "fixture/one": { temperature: 0 }, "fixture/two/slashed": { temperature: null } },
+    } });
+    const stream = h.registry.streamSimple;
+    const temperatures: Array<number | undefined> = [];
+    h.registry.streamSimple = (model, context, options) => {
+      temperatures.push(options!.temperature);
+      if (model.id === "one") assert.equal(options!.temperature, 0);
+      else assert.equal(Object.hasOwn(options!, "temperature"), false);
+      return stream(model, context, options);
+    };
+    const reasons: string[] = [];
+    assert.deepEqual(await correct("raw synthetic", h.config, new AbortController().signal, session(), h.registry, {
+      current: { provider: "fixture", id: "one" }, warning: (_failed, reason) => reasons.push(reason),
+    }), { kind: "corrected", text: "corrected synthetic" });
+    assert.deepEqual(temperatures, [0, undefined]);
+    assert.deepEqual(reasons, ["provider failure"]);
+  });
+}

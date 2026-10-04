@@ -161,7 +161,8 @@ export async function correct(
             const context: Context = { systemPrompt: CORRECTION_PROMPT, tools: [], messages: [{ role: "user", content: data, timestamp }] };
             // Pi's supported off request is omitted reasoning, not an off cast.
             const stream = registry.streamSimple(model, context, {
-              signal: attemptSignal, temperature: 0, maxTokens: Math.min(4096, model.maxTokens), cacheRetention: "none",
+              signal: attemptSignal, maxTokens: Math.min(4096, model.maxTokens), cacheRetention: "none",
+              ...(tuning.temperature !== null ? { temperature: tuning.temperature } : {}),
               ...(typeof level === "string" && level !== "off" ? { reasoning: level } : {}),
             });
             return correctedText(await stream.result(), options.manual ?? false);

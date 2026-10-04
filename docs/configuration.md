@@ -44,10 +44,10 @@ Endpoints/model IDs below are placeholders, not compatibility evidence:
     "automatic": true,
     "order": ["$current", "YOUR_PROVIDER/YOUR_MODEL"],
     "modelSettings": {
-      "YOUR_PROVIDER/YOUR_MODEL": { "thinkingLevel": "low" },
-      "ANOTHER_PROVIDER/MAIN_MODEL": { "thinkingLevel": null }
+      "YOUR_PROVIDER/YOUR_MODEL": { "thinkingLevel": "low", "temperature": 0.2 },
+      "ANOTHER_PROVIDER/MAIN_MODEL": { "thinkingLevel": null, "temperature": null }
     },
-    "defaults": { "thinkingLevel": null, "attemptTimeoutSeconds": 15 },
+    "defaults": { "thinkingLevel": null, "temperature": null, "attemptTimeoutSeconds": 15 },
     "context": { "maxChars": 8000 },
     "totalTimeoutSeconds": 30
   },
@@ -84,6 +84,7 @@ and zero where supported, not truthiness defaults.
 | `correction.order` | `[]`; no candidates/requests by default; at most 32 `provider/modelId` or `$current` selectors; model ID may contain slashes |
 | `correction.modelSettings` | at most 32 actual named-model tuning entries; `$current` is not a key |
 | `correction.defaults.thinkingLevel` | null; named override permitted |
+| `correction.defaults.temperature` | null; otherwise a finite nonnegative number; named override permitted |
 | `correction.defaults.attemptTimeoutSeconds` | 15; named override permitted |
 | `correction.totalTimeoutSeconds` | 30; includes snapshot/lookup/auth/request/response |
 | `correction.context.maxChars` | 8000 Unicode code points; integer 0–100000, including labels/separators/markers |
@@ -95,6 +96,18 @@ budget. Zero disables history, not correction. Manual target and correction/STT
 text limits are 64000 Unicode points; correction output is also capped at the
 model's limit or 4096 tokens. Truncated/incomplete/tool-call results are rejected.
 STT response bytes are capped at 256 KiB. Provider-body errors are never displayed.
+
+Temperature inherits from `correction.defaults` when omitted in a named entry.
+Explicit `null` clears inheritance and omits the request option, leaving Pi/the
+adapter/backend default; `0` is an explicit override, not absence. There is no
+forced temperature or API-specific exception. Named settings also apply to the
+actual model resolved by `$current`, without authorizing extra candidates.
+
+Numeric overrides are passed to Pi. Accepted ranges and sampling support depend
+on the adapter/model; a syntactically valid number is not a compatibility promise.
+For example, forcing a temperature can fail on the Codex route. Prefer null unless
+you have verified an override. Rejected requests follow normal correction fallback;
+the extension never silently substitutes another temperature.
 
 Without a transcription section, the explicit `openai` definition is:
 `https://api.openai.com/v1/audio/transcriptions`, `whisper-1`,

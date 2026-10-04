@@ -279,6 +279,7 @@ Timeouts and durations are in seconds; `maxBytes` is 24 MiB.
     "modelSettings": {},
     "defaults": {
       "thinkingLevel": null,
+      "temperature": null,
       "attemptTimeoutSeconds": 15
     },
     "context": {

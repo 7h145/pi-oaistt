@@ -99,6 +99,13 @@ and restart the order for every operation. The automatic switch never authorizes
 a model, and F7 uses the same order independently. Pi owns routing/credentials;
 correction does not inherit main-agent thinking settings or start an agent turn.
 
+Temperature tuning defaults to null: no request option for any API. Section
+`defaults` and actual-model `modelSettings` share finite nonnegative numeric
+validation; omitted entries inherit, explicit null clears, and zero is preserved.
+Overrides are forwarded to Pi without guessing provider support or silently
+rewriting values. Tests can verify option construction without proving live
+adapter/backend acceptance. Per-operation snapshots freeze this tuning too.
+
 One bounded committed active-branch snapshot supplies eligible user/assistant text
 and summaries, excluding direct tools, images, thinking, shell and custom messages.
 History can be disabled. Dictation targets only the transcript; F7 targets the
@@ -132,30 +139,32 @@ non-TUI metadata does not enable recording or editor access.
 
 ## Automated evidence
 
-The latest full local baseline passed **338 synthetic tests and typechecking**
-against Pi 0.99.2 on Node 22.19.0, 24.21.0 and 26.10.0. The supplied hosted Node
-24.21.0 run passed typechecking but failed three recorder-success tests (335/338
-passed), each exceeding a test-only 50 ms graceful-stop deadline.
+**382 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
+22.19.0 and 24.21.0. The full background matrix used isolated Pi settings and
+verified unchanged tested-source/documentation hashes before commit.
 
-A delayed synthetic finalization reproduces that failure deterministically.
-Successful recorder fixtures now use the production-sized three-second budget;
-deliberate hung-stop fixtures retain their short deadline. Production timeouts
-are unchanged. Focused Node 24.21.0 typechecking and all 25 recorder tests pass;
-20 further runs of four normal/delayed-stop cases also pass (80 executions).
-Tested recorder inputs were unchanged. A hosted rerun is still needed to confirm
-the CI fix. The diagnostic/model-name changes separately pass typechecking and
-26 focused correction/config tests on Node 26.10.0; no full matrix was rerun.
+Successful recorder fixtures use the production-sized three-second grace budget;
+deliberate hung-stop fixtures retain a short deadline. Production timeouts are
+unchanged. Delayed-finalization coverage and repeated-stop checks address the
+fixture scheduling sensitivity observed in hosted Node 24 CI. The latest full
+local matrix passes, but a hosted rerun is still needed for CI confirmation.
 
 | Area | Coverage |
 | --- | --- |
 | Editor/ownership | Native regular/fullscreen, idle/busy/compaction capture, semantic paste/references/undo, eager manual edit cancellation, cursor/focus, no-op output, late completion and retained cleanup |
-| Correction | Automatic/manual with empty/configured/unavailable order, frozen current identity and deduplication, tuning/null/thinking errors, auth-ready empty-order non-dispatch, deadlines, context exclusions and immutable requests |
+| Correction | Automatic/manual with empty/configured/unavailable order, frozen current identity and deduplication, tuning/null/thinking errors, nullable temperature inheritance/overrides and request omission, auth-ready empty-order non-dispatch, deadlines, context exclusions and immutable requests |
 | Recorder | Missing tool subsets, executable-access faults, cancellation, isolated PATH lookup with fake clients, redacted server failures and owned capture/cleanup |
 | STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
 | Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
 | UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, help/status rendering, bounded metadata, narrow/theme/footer layouts, pending keys and exact aliases |
 | Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
 | Documentation | Runnable JSON examples, exact default settings and explicit example order |
+
+The owner confirms the nullable-temperature configuration works as expected:
+Codex correction succeeds without an override; explicitly setting
+`correction.defaults.temperature` to zero restores the failing behavior on their
+route. This is a live A/B confirmation of request compatibility, not proof for
+all provider/model sampling overrides. Anthropic is not live-validated.
 
 Recorder fixtures spawn detached Node children emitting synthetic PCM, not actual
 recorders. HTTP tests use controlled synthetic responses or loopback servers;

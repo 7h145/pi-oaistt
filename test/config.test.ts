@@ -187,3 +187,50 @@ test("documented JSON examples parse; defaults stay empty and recommendation req
   const explicitOther = parseConfig({ correction: { order: ["fixture/one"], modelSettings: { "openai-codex/gpt-6-luna": {} } } });
   assert.deepEqual(explicitOther.correction.order, ["fixture/one"]);
 });
+
+test("correction temperature defaults, numeric overrides, explicit null and frozen snapshots", () => {
+  assert.equal(parseConfig({}).correction.defaults.temperature, null);
+  const config = parseConfig({ correction: {
+    defaults: { temperature: 0.6 },
+    modelSettings: {
+      "fixture/inherit": {}, "fixture/zero": { temperature: 0 },
+      "fixture/clear": { temperature: null }, "fixture/override": { temperature: 3 },
+    },
+  } });
+  assert.deepEqual(config.correction.order, []); // tuning never authorizes a model
+  assert.equal(config.correction.modelSettings["fixture/inherit"]!.temperature, 0.6);
+  assert.equal(config.correction.modelSettings["fixture/zero"]!.temperature, 0);
+  assert.equal(config.correction.modelSettings["fixture/clear"]!.temperature, null);
+  assert.equal(config.correction.modelSettings["fixture/override"]!.temperature, 3);
+  const snapshot = configSnapshot(config);
+  config.correction.defaults.temperature = 1;
+  config.correction.modelSettings["fixture/zero"]!.temperature = 1;
+  assert.equal(snapshot.correction.defaults.temperature, 0.6);
+  assert.equal(snapshot.correction.modelSettings["fixture/zero"]!.temperature, 0);
+  assert.throws(() => { snapshot.correction.defaults.temperature = 0; }, TypeError);
+  assert.throws(() => { snapshot.correction.modelSettings["fixture/zero"]!.temperature = 0.2; }, TypeError);
+});
+
+for (const value of [-0.1, NaN, Infinity, -Infinity, "EXCLUDED_SYNTHETIC_VALUE", false, {}, []]) {
+  for (const named of [false, true]) {
+    test(`invalid correction temperature rejected without value disclosure: ${typeof value}, named=${named}`, () => {
+      const correction = named ? { modelSettings: { "fixture/inactive": { temperature: value } } }
+        : { defaults: { temperature: value } };
+      assert.throws(() => parseConfig({ correction }), error => error instanceof ConfigError &&
+        error.message.includes("correction.temperature") && !error.message.includes("EXCLUDED_SYNTHETIC_VALUE"));
+    });
+  }
+}
+
+for (const temperature of [null, 0, 0.6]) {
+  test(`correction temperature survives explicit unrelated config saves: ${temperature}`, async () => {
+    const h = await store();
+    await writeFile(join(h.dir, "pi-oaistt.json"), JSON.stringify({ correction: {
+      defaults: { temperature }, modelSettings: { "fixture/one": { temperature: null } },
+    } }));
+    await h.store.load(); h.store.setSource("synthetic-source"); await h.store.saveSource();
+    const saved = JSON.parse(await readFile(join(h.dir, "pi-oaistt.json"), "utf8"));
+    assert.equal(saved.correction.defaults.temperature, temperature);
+    assert.equal(saved.correction.modelSettings["fixture/one"].temperature, null);
+  });
+}

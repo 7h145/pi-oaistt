@@ -88,6 +88,12 @@ independent. The opt-in README recommendation must never appear without an expli
 order entry or be appended to an existing chain. Choosing it is not live validation;
 test its registration/auth/capabilities and quality separately if you opt in.
 
+Check temperature unset/null (no sampling override), an approved numeric default,
+a named override including `0`, and named null clearing that default. `$current`
+uses its actual model's tuning. Verify only explicitly authorized models/settings;
+synthetic option tests do not establish adapter/backend acceptance. If a request
+rejects an override, normal fallback must occur without silently changing its value.
+
 Check null/unset/off and approved supported levels on selected actual providers;
 verify mapped controls and quality using synthetic technical names, ambiguity and
 multilingual text. Locally invalid thinking gives red error plus guarded raw

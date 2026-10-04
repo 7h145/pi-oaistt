@@ -19,7 +19,7 @@ import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { parseBindings, type Bindings } from "./keys.ts";
 
 export type Thinking = ModelThinkingLevel | null | { invalid: true };
-export interface ModelSettings { thinkingLevel: Thinking; attemptTimeoutSeconds: number }
+export interface ModelSettings { thinkingLevel: Thinking; temperature: number | null; attemptTimeoutSeconds: number }
 export interface Profile {
   endpoint: string; model: string;
   auth: { type: "none" } | { type: "env"; name: string };
@@ -84,9 +84,15 @@ export function profileName(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u.test(value)) fail("transcription profile name");
   return value;
 }
+function temperature(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) fail("correction.temperature (null or finite nonnegative number)");
+  return value;
+}
 function tuning(raw: Record<string, unknown>, defaults: ModelSettings): ModelSettings {
-  keys(raw, ["thinkingLevel", "attemptTimeoutSeconds"], "correction tuning");
+  keys(raw, ["thinkingLevel", "temperature", "attemptTimeoutSeconds"], "correction tuning");
   return { thinkingLevel: raw.thinkingLevel === undefined ? defaults.thinkingLevel : thinking(raw.thinkingLevel),
+    temperature: temperature(fallback(raw.temperature, defaults.temperature)),
     attemptTimeoutSeconds: seconds(fallback(raw.attemptTimeoutSeconds, defaults.attemptTimeoutSeconds), "correction.attemptTimeoutSeconds") };
 }
 
@@ -136,7 +142,7 @@ export function parseConfig(value: unknown): Config {
   if (new Set(order).size !== order.length || order.some(name => !Object.hasOwn(profiles, name))) fail("transcription.order references/duplicates");
   const c = object(fallback(root.correction, {}), "correction");
   keys(c, ["automatic", "order", "modelSettings", "defaults", "context", "totalTimeoutSeconds"], "correction");
-  const cd = tuning(object(fallback(c.defaults, {}), "correction.defaults"), { thinkingLevel: null, attemptTimeoutSeconds: 15 });
+  const cd = tuning(object(fallback(c.defaults, {}), "correction.defaults"), { thinkingLevel: null, temperature: null, attemptTimeoutSeconds: 15 });
   const settings = object(fallback(c.modelSettings, {}), "correction.modelSettings");
   if (Object.keys(settings).length > 32) fail("correction.modelSettings (at most 32)");
   const modelSettings: Record<string, ModelSettings> = Object.create(null);
