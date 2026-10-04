@@ -132,8 +132,9 @@ Equivalent dictation and cancellation commands are:
 
 Bare **`/oaistt`** shows concise help and status; it does not start recording.
 Use **`/oaistt help`** for commands, aliases, default/active shortcuts, and
-pending key changes. **`/oaistt status`** shows the current operation and
-next selections without the command list.
+pending key changes. **`/oaistt status`** shows the current operation,
+transcription selection, correction model order, transcription fallback policy,
+and next recorder source without the command list.
 
 Only one dictation or correction operation runs at a time. Pressing F8
 while transcription, correction, or cleanup is underway reports the

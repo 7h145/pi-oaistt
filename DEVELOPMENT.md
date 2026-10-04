@@ -137,10 +137,18 @@ informational notices cannot hide command help or pending bindings. Profile tool
 expose bounded selection metadata, not audio, drafts, endpoints or credentials;
 non-TUI metadata does not enable recording or editor access.
 
+Status uses aligned, bold theme-accented labels: Transcription, Correction,
+Recorder, then Active keys. Transcription includes its own brief fallback switch.
+Correction displays the configured next-operation order and resolves an explicitly
+listed `$current` to the main identity at display time, without registry/auth
+probes. This is a policy preview, not a live-attempt/availability claim; active
+work retains its frozen identity. Missing configuration reports unavailable,
+recorder source names remain undisclosed, and theme styling is computed on request.
+
 ## Automated evidence
 
-**382 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
-22.19.0 and 24.21.0. The full background matrix used isolated Pi settings and
+**390 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
+22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
 verified unchanged tested-source/documentation hashes before commit.
 
 Successful recorder fixtures use the production-sized three-second grace budget;
@@ -156,7 +164,7 @@ local matrix passes, but a hosted rerun is still needed for CI confirmation.
 | Recorder | Missing tool subsets, executable-access faults, cancellation, isolated PATH lookup with fake clients, redacted server failures and owned capture/cleanup |
 | STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
 | Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
-| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, help/status rendering, bounded metadata, narrow/theme/footer layouts, pending keys and exact aliases |
+| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, coalesced help/status rendering, styled/aligned section order and model identities, scoped fallback, no model probes, frozen-versus-next selection, bounded metadata, narrow/wide-character/theme/footer layouts, pending keys and exact aliases |
 | Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
 | Documentation | Runnable JSON examples, exact default settings and explicit example order |
 

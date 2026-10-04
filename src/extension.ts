@@ -275,23 +275,33 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     } finally { changing--; }
   }
   const bindingsLabel = (bindings: Bindings) => ACTIONS.map(a => `${a}=${bindings[a].join(",") || "unbound"}`).join("; ");
-  function statusText(): string {
+  function statusText(ctx: ExtensionContext): string {
     const config = selection.config;
+    const label = (key: string) => ctx.ui.theme.style(`${key}:`, { fg: "accent", bold: true });
+    const row = (key: string, value: string) => `${label(key)}${" ".repeat(Math.max(1, 15 - key.length - 1))}${value}`;
+    // Preview next-operation policy, not the active attempt or proven availability.
+    // Only inspect the main identity when explicitly authorized by $current.
+    const fallback = config ? config.transcription.automaticFallback ? "on" : "off" : "unavailable";
+    const model = config?.correction.order.includes("$current") ? ctx.model : undefined;
+    const models = config?.correction.order.map(selector => selector === "$current"
+      ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})`
+      : safeLabel(selector)).join(" → ") || "none (no requests)";
     const lines = [
-      `oaistt: ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. Config: ${config ? "ready" : "unavailable"}.`,
-      `Active STT: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}.`,
-      `Fallback: ${config?.transcription.automaticFallback ? "on" : "off"}. Next recorder: ${config?.recorder.source ? "configured override" : "server default"}.`,
-      `Correction: ${config?.correction.automatic ? "automatic on" : "automatic off"} (${config?.correction.order.length ?? 0} selectors).`,
-      `Active keys: ${bindingsLabel(activeBindings)}.`,
+      `${label("oaistt")} ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. ${label("Config")} ${config ? "ready" : "unavailable"}.`,
+      "",
+      row("Transcription", `active: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}; fallback: ${fallback}.`),
+      row("Correction", config ? `automatic ${config.correction.automatic ? "on" : "off"}; next order: ${models}.` : "unavailable."),
+      row("Recorder", config ? `next capture: ${config.recorder.source ? "configured source override" : "server default source"}.` : "unavailable."),
+      row("Active keys", `${bindingsLabel(activeBindings)}.`),
     ];
     if (config && JSON.stringify(config.keybindings) !== JSON.stringify(registeredBindings)) lines.push(
-      `Configured/pending keys: ${bindingsLabel(config.keybindings)}.`,
+      row("Configured/pending keys", `${bindingsLabel(config.keybindings)}.`),
       "Full Pi /reload required; native conflicts may disable bindings. Cross-extension conflicts follow Pi priority.",
     );
     return lines.join("\n");
   }
   function status(ctx: ExtensionContext, lead?: string): void {
-    notice(ctx, [lead, statusText()].filter(Boolean).join("\n"));
+    notice(ctx, [lead, statusText(ctx)].filter(Boolean).join("\n"));
   }
   function help(ctx: ExtensionContext, concise: boolean): void {
     const controls = ["Controls (Defaults / Active keys):", ...ACTIONS.map(action =>
@@ -300,7 +310,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     const summary = "Defaults: F8 dictation; F7 correct draft; F12 cancel (never submits). /oaistt help lists commands and controls.";
     // Pi coalesces consecutive info notices. Send help and state atomically so
     // the final status/pending-key notice cannot replace the command help.
-    notice(ctx, [concise ? summary : `${COMMAND_HELP}\n\n${controls}`, statusText()].join("\n\n"));
+    notice(ctx, [concise ? summary : `${COMMAND_HELP}\n\n${controls}`, statusText(ctx)].join("\n\n"));
   }
   async function command(args: string, ctx: ExtensionContext): Promise<void> {
     const current = validScope(ctx); if (!current) return;

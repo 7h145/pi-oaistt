@@ -40,12 +40,13 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
     mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings, notifications: options.nativeNotifications });
   const notices: string[] = [];
+  const styledNotices: string[] = [];
   const categories: string[] = [];
   const statuses = new Map<string, string | undefined>();
   const widgets = new Map<string, string[] | undefined>();
   const ui = { ...native.ui,
     notify: (text: string, category: "info" | "warning" | "error" = "info") => {
-      categories.push(category); notices.push(text.replace(/\x1b\[[0-9;]*m/g, ""));
+      categories.push(category); styledNotices.push(text); notices.push(text.replace(/\x1b\[[0-9;]*m/g, ""));
       if (options.nativeNotifications) native.ui.notify(text, category);
     },
     setStatus: (key: string, value: string | undefined) => {
@@ -122,7 +123,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   native.mode.setupExtensionShortcuts({ getModelRegistry: () => ctx.modelRegistry, getShortcuts: () => shortcuts as any });
   native.mode.defaultEditor.onEscape = () => main.abort();
   open.push(async () => { await emit("session_shutdown", { reason: "quit" }); native.stop(); });
-  return { ...native, ctx, ui, notices, categories, statuses, widgets, config, signals, settings, ready, raw, edited, main, emit,
+  return { ...native, ctx, ui, notices, styledNotices, categories, statuses, widgets, config, signals, settings, ready, raw, edited, main, emit,
     controller: result.controller,
     start: async () => { await emit("session_start", { reason: "startup" }); native.mode.setupExtensionShortcuts({ getModelRegistry: () => ctx.modelRegistry, getShortcuts: () => shortcuts as any }); },
     tools, targets, correctionOptions,
@@ -577,7 +578,7 @@ test("help shows actual disabled/rebound controls and pending keys in one native
     h.notices.length = 0; await h.command(args);
     const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.equal(h.notices.length, 1);
-    assert.match(rendered, /Active keys: dictation.toggle=f9/);
+    assert.match(rendered, /Active keys:\s+dictation.toggle=f9/);
     assert.match(rendered, /Configured\/pending keys: dictation.toggle=f10/);
     assert.match(rendered, /Full Pi \/reload required/);
   }
@@ -606,7 +607,7 @@ test("status-only output omits command help; extra help/status arguments stay in
   for (const args of ["status", "s"]) {
     h.notices.length = 0; await h.command(args);
     assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt: idle/);
-    assert.match(h.notices[0]!, /Next recorder: server default/);
+    assert.match(h.notices[0]!, /Recorder:\s+next capture: server default source/);
     assert.doesNotMatch(h.notices[0]!, /command help|dictation toggle|Defaults:/);
   }
   for (const args of ["help extra", "h extra", "status extra", "s extra"]) {
@@ -629,7 +630,8 @@ for (const automatic of [true, false]) for (const state of ["empty", "configured
     h.config.correction.order = state === "empty" ? [] : [state === "configured" ? "fixture/correction" : "missing/model"];
     h.setModel(provider.getModel("correction"));
     await h.start(); await h.command("status");
-    assert.ok(h.notices.at(-1)!.includes(`Correction: automatic ${automatic ? "on" : "off"} (${h.config.correction.order.length} selectors).`));
+    assert.match(h.notices.at(-1)!, new RegExp(`Correction:\\s+automatic ${automatic ? "on" : "off"}; next order:`));
+    assert.ok(h.notices.at(-1)!.includes(state === "empty" ? "none (no requests)" : h.config.correction.order[0]!));
     h.ui.setEditorText(manual ? "raw synthetic" : "");
     if (manual) h.f7();
     else { h.f8(); await nextTask(); h.f8(); h.raw.resolve("raw synthetic"); }
@@ -655,4 +657,104 @@ test("source-list failures redact unknown errors rather than exposing backend st
   const h = harness({ sources: async () => { throw new Error("EXCLUDED_SYNTHETIC_DIAGNOSTICS"); } });
   await h.start(); await h.command("recorder sources");
   assert.equal(h.notices.at(-1), "Cannot list recording sources; check Pulse server access.");
+});
+
+for (const fullscreen of [false, true]) test(`status has ordered styled labels, model identities and explicit fallback (${fullscreen ? "fullscreen" : "regular"})`, async () => {
+  const h = harness({ fullscreen, nativeNotifications: true });
+  const config = profilesConfig();
+  config.correction.automatic = true;
+  config.correction.order = ["fixture/first", "$current", "fixture/last/slashed/語"];
+  h.setConfig(config);
+  const provider = fauxProvider({ provider: "fixture", models: [{ id: "main" }] });
+  h.setModel(provider.getModel("main"));
+  h.ctx.modelRegistry = { find: () => { throw new Error("status must not probe models"); } } as unknown as ModelRegistry;
+  await h.start(); h.ui.setEditorText("EXCLUDED_SYNTHETIC_DRAFT");
+  const counts = h.counts(), entries = h.ctx.sessionManager.getEntries().length;
+  for (const args of ["", "help", "status", "s"]) {
+    await h.command(args);
+    const text = h.notices.at(-1)!;
+    assert.match(text, /Transcription:\s+active: none; next: local; default: local; fallback: on/);
+    assert.match(text, /Correction:\s+automatic on; next order: fixture\/first → \$current \(fixture\/main\) → fixture\/last\/slashed\/語/);
+    assert.doesNotMatch(text, /^Fallback:/m);
+    assert.match(text, /Recorder:\s+next capture: server default source/);
+    const keys = ["Transcription", "Correction", "Recorder", "Active keys"];
+    const rows = text.split("\n").filter(line => keys.some(key => line.startsWith(`${key}:`)));
+    assert.deepEqual(rows.map(line => line.split(":")[0]), keys);
+    assert.ok(rows.every(line => line.match(/^[^:]+:\s+/u)![0].length === 15));
+    assert.doesNotMatch(text, /EXCLUDED_SYNTHETIC_DRAFT|https?:|OPENAI_API_KEY|Active STT|selectors/);
+    for (const key of keys) {
+      const prefix = h.ui.theme.style(`${key}:`, { fg: "accent", bold: true }).split(`${key}:`)[0]!;
+      assert.match(prefix, /\x1b\[/); // Real theme output, not literal Markdown decoration.
+      assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}${key}:`));
+      assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${prefix}${key}:`));
+    }
+    for (const width of [32, 40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
+  }
+  assert.deepEqual(h.counts(), counts); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
+  assert.equal(h.ui.getEditorText(), "EXCLUDED_SYNTHETIC_DRAFT"); assert.equal(h.promptCalls.length, 0);
+  assert.equal(h.ctx.sessionManager.getEntries().length, entries); assert.equal(h.main.signal.aborted, false);
+});
+
+test("status distinguishes disabled fallback and recorder override without disclosing the source", async () => {
+  const h = harness();
+  h.setConfig(parseConfig({ recorder: { source: "EXCLUDED_SYNTHETIC_SOURCE" }, transcription: {
+    ...profilesConfig().transcription, automaticFallback: false,
+  } }));
+  await h.start(); await h.command("status");
+  assert.match(h.notices.at(-1)!, /Transcription:.*fallback: off/);
+  assert.doesNotMatch(h.notices.at(-1)!, /^Fallback:/m);
+  assert.match(h.notices.at(-1)!, /Recorder:\s+next capture: configured source override/);
+  assert.match(h.notices.at(-1)!, /Correction:\s+automatic on; next order: none \(no requests\)/);
+  assert.doesNotMatch(h.notices.at(-1)!, /EXCLUDED_SYNTHETIC_SOURCE/);
+});
+
+test("status does not read the main model unless $current is explicitly configured", async () => {
+  const h = harness(); await h.start();
+  Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("unauthorized main-model access"); } });
+  for (const args of ["", "help", "status", "s"]) await h.command(args);
+  assert.match(h.notices.at(-1)!, /none \(no requests\)/);
+});
+
+test("status marks missing current model and unavailable config without claiming ready defaults", async () => {
+  const h = harness(); h.config.correction.order = ["$current"];
+  await h.start(); await h.command("status");
+  assert.match(h.notices.at(-1)!, /\$current \(unavailable\)/);
+  h.selection.reset(); await h.command("status");
+  assert.match(h.notices.at(-1)!, /Config: unavailable/);
+  assert.match(h.notices.at(-1)!, /Correction:\s+unavailable/);
+  assert.match(h.notices.at(-1)!, /Transcription:.*fallback: unavailable/);
+  assert.match(h.notices.at(-1)!, /Recorder:\s+unavailable/);
+  assert.doesNotMatch(h.notices.at(-1)!, /automatic off|server default source/);
+});
+
+test("status previews next current-model identity without retargeting frozen work", async () => {
+  const h = harness(); h.config.correction.automatic = true; h.config.correction.order = ["$current"];
+  const provider = fauxProvider({ provider: "fixture", models: [{ id: "first" }, { id: "second" }] });
+  h.setModel(provider.getModel("first")); await h.start(); h.f8(); await nextTask();
+  h.setModel(provider.getModel("second")); await h.command("status");
+  assert.match(h.notices.at(-1)!, /next order: \$current \(fixture\/second\)/);
+  h.f8(); h.raw.resolve("synthetic text"); await nextTask();
+  assert.deepEqual(h.correctionOptions[0]!.current, { provider: "fixture", id: "first" });
+  h.edited.resolve({ kind: "corrected", text: "synthetic corrected" }); await h.controller.settled();
+  assert.equal(h.ui.getEditorText(), "synthetic corrected");
+});
+
+test("status model labels strip controls and bound long identities", async () => {
+  const h = harness(); h.config.correction.order = ["$current", `fixture/${"x".repeat(200)}`];
+  h.setModel({ provider: "fixture\n", id: "model\x1b\x07\u202e\nEND" } as ExtensionContext["model"]);
+  await h.start(); await h.command("status");
+  const text = h.notices.at(-1)!;
+  assert.match(text, /\$current \(fixture\/modelEND\)/);
+  assert.ok(text.includes(`fixture/${"x".repeat(56)}`));
+  assert.doesNotMatch(text, /x{57}|\x07|\x1b|\u202e/);
+});
+
+test("status labels use the current theme on each request", async () => {
+  const h = harness(); await h.start(); await h.command("status");
+  const before = h.styledNotices.at(-1)!;
+  initTheme("light", false);
+  await h.command("status");
+  const prefix = h.ui.theme.style("Transcription:", { fg: "accent", bold: true }).split("Transcription:")[0]!;
+  assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}Transcription:`));
+  assert.notEqual(h.styledNotices.at(-1), before);
 });

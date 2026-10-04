@@ -50,7 +50,7 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     await command.handler("status", runner.createCommandContext());
     assert.ok(notices.some((text) => text.includes("pi-oaistt ready")));
     assert.ok(notices.some((text) => text.includes("F8 dictation")));
-    assert.ok(notices.some((text) => text.includes("Config: ready")));
+    assert.ok(notices.some((text) => text.replace(/\x1b\[[0-9;]*m/g, "").includes("Config: ready")));
     native.ui.setEditorText("synthetic retained draft");
     await command.handler("recorder source", runner.createCommandContext());
     assert.equal(native.mode.extensionInput, undefined);
