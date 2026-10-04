@@ -240,6 +240,14 @@ from manual F7, and is not tracked or rewritten after insertion.
 
 Bare `/oaistt` shows concise help/status. `/oaistt help` lists commands and
 exact aliases, default/active controls, pending bindings and safe usage.
+
+The single-line startup tagline uses active shortcuts after binding-conflict checks,
+with highlighted keys and `·` separators; Pi handles wrapping. A bound toggle
+shows “to dictate”; without it, both start and stop must be bound to show their
+hints. An incomplete pair omits dictation. Unbound correction/cancel hints are
+omitted independently. `see /oaistt help` always remains. This is orientation,
+not a microphone/provider readiness check.
+
 The status header identifies the loaded installation, for example
 `oaistt v0.2.0 (1234abc): idle. Config: ready.` Version comes from its own
 `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,

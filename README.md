@@ -422,8 +422,8 @@ Access to a transcription server is separate from microphone access.
 
 ## Troubleshooting
 
-Start with **`/oaistt status`** and **`/oaistt help`**. A ready notice
-confirms loading, not microphone capture, credentials, or provider health.
+Start with **`/oaistt status`** and **`/oaistt help`**. The startup tagline
+lists active shortcuts, not microphone capture, credentials, or provider health.
 
 - **Missing audio tools:** on Debian-family systems, install `pulseaudio-utils`
   where Pi runs, then retry. The extension never installs packages.

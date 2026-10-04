@@ -835,3 +835,41 @@ for (const mode of ["rpc", "json", "print"] as const) test(`non-TUI ${mode} does
   const h = harness({ mode, identity: async () => { reads++; return { version: "0.2.0" }; } });
   await h.start(); assert.equal(reads, 0);
 });
+
+const startupCases = [
+  { name: "defaults", keys: {}, hints: "F8 to dictate · F7 to correct · F12 to cancel" },
+  { name: "rebound", keys: { "dictation.toggle": "f9", "editor.correct": "f10", "operation.cancel": "f11" }, hints: "F9 to dictate · F10 to correct · F11 to cancel" },
+  { name: "toggle wins", keys: { "dictation.start": "f9", "dictation.stop": "f10" }, hints: "F8 to dictate · F7 to correct · F12 to cancel" },
+  { name: "separate start/stop", keys: { "dictation.toggle": [], "dictation.start": "f9", "dictation.stop": "f10" }, hints: "F9 to start dictation · F10 to stop dictation · F7 to correct · F12 to cancel" },
+  { name: "missing stop", keys: { "dictation.toggle": [], "dictation.start": "f9" }, hints: "F7 to correct · F12 to cancel" },
+  { name: "missing start", keys: { "dictation.toggle": [], "dictation.stop": "f10" }, hints: "F7 to correct · F12 to cancel" },
+  { name: "no dictation", keys: { "dictation.toggle": [] }, hints: "F7 to correct · F12 to cancel" },
+  { name: "no correction", keys: { "editor.correct": [] }, hints: "F8 to dictate · F12 to cancel" },
+  { name: "no cancellation", keys: { "operation.cancel": [] }, hints: "F8 to dictate · F7 to correct" },
+  { name: "all disabled", keys: { "dictation.toggle": [], "editor.correct": [], "operation.cancel": [] }, hints: "" },
+  { name: "multiple bindings and punctuation", keys: { "dictation.toggle": ["f8", "shift+f8", "+"] }, hints: "F8 / Shift+F8 / + to dictate · F7 to correct · F12 to cancel" },
+  { name: "native toggle conflict", keys: { "dictation.toggle": "f6", "dictation.start": "f9", "dictation.stop": "f10" }, hints: "F9 to start dictation · F10 to stop dictation · F7 to correct · F12 to cancel", native: { "app.model.select": "f6" } },
+  { name: "native start conflict", keys: { "dictation.toggle": [], "dictation.start": "f6", "dictation.stop": "f10" }, hints: "F7 to correct · F12 to cancel", native: { "app.model.select": "f6" } },
+  { name: "ambiguous toggle/correction", keys: { "dictation.toggle": "f8", "editor.correct": "f8" }, hints: "F12 to cancel" },
+] as const;
+for (const fullscreen of [false, true]) for (const row of startupCases) {
+  test(`single-line startup tagline: ${row.name}, ${fullscreen ? "fullscreen" : "regular"}`, async () => {
+    const h = harness({ fullscreen, nativeNotifications: true, bindings: "native" in row ? row.native : undefined });
+    h.setConfig(parseConfig({ keybindings: row.keys }));
+    await h.start();
+    const banners = h.notices.filter(text => text.startsWith("oaistt — speech to text"));
+    assert.deepEqual(banners, [`oaistt — speech to text${row.hints ? ` · ${row.hints}` : ""} · see /oaistt help`]);
+    assert.doesNotMatch(banners[0]!, /\n|ready|Defaults|unbound/);
+    const rendered = h.mode.chatContainer.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    assert.match(rendered, /oaistt — speech to text/); assert.match(rendered, /see\s+\/oaistt\s+help/);
+    for (const width of [32, 40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
+    const prefix = h.ui.theme.style("oaistt", { fg: "accent", bold: true }).split("oaistt")[0]!;
+    assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}oaistt`));
+    if (row.name === "defaults") {
+      const keyPrefix = h.ui.theme.style("F8", { fg: "accent", bold: true }).split("F8")[0]!;
+      assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${keyPrefix}F8`));
+    }
+    assert.equal(h.counts().captures, 0); assert.equal(h.targets.length, 0); assert.equal(h.promptCalls.length, 0);
+    assert.equal(h.main.signal.aborted, false); assert.equal(h.ctx.sessionManager.getEntries().length, 0);
+  });
+}

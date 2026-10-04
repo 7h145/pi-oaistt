@@ -138,6 +138,13 @@ informational notices cannot hide command help or pending bindings. Profile tool
 expose bounded selection metadata, not audio, drafts, endpoints or credentials;
 non-TUI metadata does not enable recording or editor access.
 
+Startup emits one orientation line, not a readiness claim: a themed oaistt title,
+speech-to-text description, active shortcut hints and help link separated by dots.
+Keys are highlighted, and Pi owns wrapping. Toggle takes precedence; without it,
+both active start/stop bindings are required to advertise dictation. Incomplete
+pairs and unbound correction/cancel hints are omitted after conflict resolution.
+All-disabled bindings retain title/help. No extra process or health check is added.
+
 Status uses aligned, bold theme-accented labels: Transcription, Correction,
 Capture device, then Active keys. Transcription includes its own brief fallback switch.
 Correction displays the configured next-operation order and resolves an explicitly
@@ -160,7 +167,7 @@ The hash identifies checkout HEAD, not a clean-worktree or immutable-build claim
 
 ## Automated evidence
 
-**Latest full baseline: 422 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
+**Latest full baseline: 450 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
 22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
 verified unchanged tested-source/documentation hashes before commit.
 
@@ -169,7 +176,11 @@ version-only npm/parent-repository cases, real local Git/worktree fixtures,
 symlinked paths, SHA-1/SHA-256 formatting, malformed/missing metadata, ambient
 repository overrides, an unresponsive Git client, single-runtime caching,
 non-TUI non-probing and real Pi
-symlink discovery/jiti rendering. No new live terminal/provider test is claimed.
+symlink discovery/jiti rendering. Startup-tagline cases cover default/rebound,
+toggle precedence, complete/incomplete pairs, independent omissions, multiple
+bindings/punctuation, native/internal conflicts and all-disabled controls in
+native regular/fullscreen at 32/40/80/120 columns. No new live terminal/provider
+test is claimed.
 
 Successful recorder fixtures use the production-sized three-second grace budget;
 deliberate hung-stop fixtures retain a short deadline. Production timeouts are
