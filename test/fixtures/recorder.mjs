@@ -24,8 +24,12 @@ if (mode !== 'silence') wav.writeInt16LE(1, 44);
 if (mode === 'invalid') wav.write('XXXX', 8);
 process.on('SIGINT', () => {
   if (mode === 'hang') return;
-  writeFileSync(path, wav);
-  process.exit(mode === 'stop-error' ? 2 : 0);
+  const finalize = () => {
+    writeFileSync(path, wav);
+    process.exit(mode === 'stop-error' ? 2 : 0);
+  };
+  if (mode === 'slow-finalize') setTimeout(finalize, 200);
+  else finalize();
 });
 if (mode === 'hang') process.on('SIGTERM', () => {});
 const partial = Buffer.from(wav); partial.writeUInt32LE(0, 4);

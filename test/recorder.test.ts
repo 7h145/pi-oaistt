@@ -39,7 +39,10 @@ async function platform(mode = "normal", changes: Partial<RecorderPlatform> = {}
   let limits = 0;
   const host: Partial<RecorderPlatform> = {
     checkTools: async () => {}, // synthetic tools; never depend on host audio clients
-    tempRoot: dir, sourceEnv: undefined, pollMs: 5, startupMs: 1000, graceMs: 50, terminateMs: 50, killMs: 1000,
+    // Real child scheduling is not a 50 ms contract. Successful stops get the
+    // production-sized default budget; accelerate only deliberate hung stops.
+    tempRoot: dir, sourceEnv: undefined, pollMs: 5, startupMs: 1000,
+    graceMs: mode === "hang" ? 50 : 3000, terminateMs: 50, killMs: 1000,
     query: async (args) => args[0] === "get-default-source" ? "fixture-mic\n"
       : JSON.stringify([{ name: "fixture-mic", mute: false, monitor_of_sink: null }]),
     spawn: (command, args, options) => {
@@ -288,4 +291,15 @@ test("real isolated PATH lookup distinguishes missing tools from redacted server
     "Cannot inspect recording source; check Pulse server access.",
     "Cannot inspect recording source; check Pulse server access.",
   ]);
+});
+
+test("slow graceful finalization uses a realistic bounded fixture deadline", async () => {
+  const h = await platform("slow-finalize"); const recording = h.record();
+  await recording.ready;
+  const audio = await recording.stop();
+  assert.equal(validateWav(await readFile(audio.path), 1024).frames, 128);
+  await recording.dispose();
+  assert.deepEqual(await readdir(h.dir), []);
+  assert.deepEqual(h.failures, []);
+  assert.throws(() => process.kill(h.pid()!, 0), { code: "ESRCH" });
 });
