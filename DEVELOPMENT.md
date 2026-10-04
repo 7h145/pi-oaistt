@@ -150,9 +150,13 @@ reports unavailable, and theme styling is computed on request.
 
 ## Automated evidence
 
-**394 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
+**Latest full baseline: 394 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
 22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
 verified unchanged tested-source/documentation hashes before commit.
+
+The subsequent owner-approved help wording change passes four focused help/status
+tests on Node 22.19.0, including native regular/fullscreen rendering and pending
+keys. This strings-only update has no full-suite or typecheck rerun, as requested.
 
 Successful recorder fixtures use the production-sized three-second grace budget;
 deliberate hung-stop fixtures retain a short deadline. Production timeouts are

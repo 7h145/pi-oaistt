@@ -551,6 +551,14 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     assert.match(rendered, /transcription source NAME/); assert.match(rendered, /Defaults/);
     assert.match(rendered, /Active keys/); assert.match(rendered, /oaistt: idle/);
     assert.equal(h.notices.length, 1);
+    const text = h.notices[0]!;
+    assert.ok(text.includes("oaistt command help (with abbreviations in parenthesis)"));
+    assert.ok(text.includes("Draft correction (default F7) needs a configured correction model."));
+    assert.ok(text.includes("oaistt never submits a prompt on its own."));
+    assert.ok(text.includes("Settings changes: /oaistt reload applies them to new dictation or correction,"));
+    assert.ok(text.includes("without interrupting dictation or correction already in progress."));
+    assert.ok(text.includes("Key or extension code changes require Pi /reload, which cancels any\ndictation or correction in progress."));
+    assert.doesNotMatch(text, /short forms also follow|not audio|Escape remains|Settings-only reload does not/);
     assert.doesNotMatch(rendered, /PRIVATE_SYNTHETIC_DRAFT|https:|endpoint|OPENAI_API_KEY/);
     for (const width of [40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
   }

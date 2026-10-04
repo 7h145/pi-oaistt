@@ -26,7 +26,7 @@ export const STATUS_KEY = "footer-compositor:right:80:pi-oaistt";
 export const WIDGET_KEY = "pi-oaistt";
 const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/source NAME [--save] | reload. Key changes require full Pi /reload.";
 const COMMAND_HELP = [
-  "oaistt command help (short forms also follow /oaistt)",
+  "oaistt command help (with abbreviations in parenthesis)",
   "  /oaistt                              Concise help and status",
   "  /oaistt help (h)                     Commands, controls and status",
   "  /oaistt status (s)                   Operation and next selections",
@@ -40,13 +40,17 @@ const COMMAND_HELP = [
   "  /oaistt transcription list (t l)     List configured profiles/policy",
   "  /oaistt transcription source NAME [--save] (t s)",
   "    Select an active profile for next recording; --save promotes its order",
-  "  /oaistt reload (rl)                  Reload pipeline settings for next work",
+  "  /oaistt reload (rl)                  Reload settings for new dictation/correction",
   "",
   "Without NAME, source commands report selection/usage; they do not change it.",
   "Selections are temporary unless --save is given; host audio settings stay unchanged.",
-  "Draft correction (default F7) needs configured correction models, not audio.",
-  "Never submits a prompt. Escape remains Pi's control; use /oaistt cancel for this operation.",
-  "Key/code changes need full Pi /reload (cancels active work). Settings-only reload does not.",
+  "Draft correction (default F7) needs a configured correction model.",
+  "oaistt never submits a prompt on its own.",
+  "",
+  "Settings changes: /oaistt reload applies them to new dictation or correction,",
+  "without interrupting dictation or correction already in progress.",
+  "Key or extension code changes require Pi /reload, which cancels any",
+  "dictation or correction in progress.",
 ].join("\n");
 type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile">;
 export interface Dependencies {
