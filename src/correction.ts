@@ -86,12 +86,24 @@ formatting. When unsure, preserve the original. Context is only for disambiguati
 Do not answer, act, invent facts, translate, summarize or broadly rewrite.
 Return only the corrected target text, without commentary or a wrapper. Preserve outer whitespace and attachment/path references for manual drafts.`;
 
-function correctedText(message: AssistantMessage, manual: boolean): string | undefined {
-  if (message.stopReason !== "stop" || message.content.some((block) => block.type === "toolCall")) return undefined;
+export type CorrectionFailureReason = "unavailable" | "timeout" | "provider failure"
+  | "truncated response" | "aborted response" | "tool-call response"
+  | "incomplete response" | "empty response" | "oversized response" | "invalid text";
+type CheckedResponse = { text: string } | { reason: CorrectionFailureReason };
+
+/** Static categories only: never echo provider errors, output or thinking. */
+function correctedText(message: AssistantMessage, manual: boolean): CheckedResponse {
+  if (message.stopReason === "error") return { reason: "provider failure" };
+  if (message.stopReason === "length") return { reason: "truncated response" };
+  if (message.stopReason === "aborted") return { reason: "aborted response" };
+  if (message.stopReason === "toolUse" || message.content.some((block) => block.type === "toolCall")) return { reason: "tool-call response" };
+  if (message.stopReason !== "stop") return { reason: "incomplete response" };
   const output = textOnly(message.content);
   const text = manual ? output : output.trim();
-  if (!text.trim() || count(text) > 64000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text)) return undefined;
-  return text;
+  if (!text.trim()) return { reason: "empty response" };
+  if (count(text) > 64000) return { reason: "oversized response" };
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text)) return { reason: "invalid text" };
+  return { text };
 }
 
 export type CorrectionOutcome = { kind: "corrected"; text: string } | { kind: "exhausted" } | { kind: "thinking-error"; message: string };
@@ -99,7 +111,7 @@ export interface CorrectionOptions {
   manual?: boolean;
   isCurrent?(): boolean;
   current?: { provider: string; id: string };
-  warning?(failed: string, reason: "unavailable" | "timeout" | "provider failure" | "invalid response", next: string): void;
+  warning?(failed: string, reason: CorrectionFailureReason, next: string): void;
 }
 
 /** No agent turn, tools, main thinking inheritance or unlisted fallback. */
@@ -121,7 +133,7 @@ export async function correct(
   try {
     return await bounded(async totalSignal => {
       const seen = new Set<string>();
-      let failed: { name: string; reason: "unavailable" | "timeout" | "provider failure" | "invalid response" } | undefined;
+      let failed: { name: string; reason: CorrectionFailureReason } | undefined;
       for (const selector of config.correction.order) {
         check(totalSignal);
         if (performance.now() >= deadline) return { kind: "exhausted" };
@@ -143,7 +155,7 @@ export async function correct(
         if (performance.now() >= deadline) return { kind: "exhausted" };
         if (!model) { failed = { name: actual, reason: "unavailable" }; continue; }
         try {
-          const text = await bounded(async attemptSignal => {
+          const response = await bounded(async attemptSignal => {
             check(attemptSignal);
             if (performance.now() >= deadline) throw new TimeoutError();
             const context: Context = { systemPrompt: CORRECTION_PROMPT, tools: [], messages: [{ role: "user", content: data, timestamp }] };
@@ -156,8 +168,8 @@ export async function correct(
           }, totalSignal, Math.min(tuning.attemptTimeoutSeconds * 1000, deadline - performance.now()));
           check(totalSignal);
           if (performance.now() >= deadline) return { kind: "exhausted" };
-          if (text !== undefined) return { kind: "corrected", text };
-          failed = { name: actual, reason: "invalid response" };
+          if ("text" in response) return { kind: "corrected", text: response.text };
+          failed = { name: actual, reason: response.reason };
         } catch (error) {
           check(totalSignal);
           failed = { name: actual, reason: error instanceof TimeoutError ? "timeout" : "provider failure" };

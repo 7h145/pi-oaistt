@@ -294,3 +294,31 @@ test("registered recommendation with usable auth/current identity never becomes 
   assert.deepEqual(await correct("raw synthetic", chosen, new AbortController().signal, session(), registry, { manual: true }), { kind: "corrected", text: "explicit synthetic correction" });
   assert.equal(provider.state.callCount, 1); assert.ok(authCalls > 0);
 });
+
+const diagnosticCases: Array<{ reason: string; response: ReturnType<typeof fauxAssistantMessage> | "throw" }> = [
+  { reason: "provider failure", response: fauxAssistantMessage("EXCLUDED_RESPONSE", { stopReason: "error", errorMessage: "EXCLUDED_PROVIDER_ERROR" }) },
+  { reason: "provider failure", response: "throw" },
+  { reason: "truncated response", response: fauxAssistantMessage("EXCLUDED_PARTIAL", { stopReason: "length" }) },
+  { reason: "aborted response", response: fauxAssistantMessage("EXCLUDED_PARTIAL", { stopReason: "aborted" }) },
+  { reason: "tool-call response", response: fauxAssistantMessage(fauxToolCall("EXCLUDED_TOOL", {})) },
+  { reason: "tool-call response", response: fauxAssistantMessage("EXCLUDED_RESPONSE", { stopReason: "toolUse" }) },
+  { reason: "incomplete response", response: fauxAssistantMessage("EXCLUDED_RESPONSE", { stopReason: "pending" }) },
+  { reason: "incomplete response", response: fauxAssistantMessage("EXCLUDED_RESPONSE", { stopReason: "deferred" }) },
+  { reason: "empty response", response: fauxAssistantMessage(" \n ") },
+  { reason: "empty response", response: fauxAssistantMessage(fauxThinking("EXCLUDED_THINKING")) },
+  { reason: "oversized response", response: fauxAssistantMessage("x".repeat(64001)) },
+  { reason: "invalid text", response: fauxAssistantMessage("EXCLUDED_CONTROL\u001b") },
+];
+for (const [index, { reason, response }] of diagnosticCases.entries()) {
+  test(`correction response diagnostic: ${reason} (${index})`, async () => {
+    const h = registryFixture([response, fauxAssistantMessage("corrected synthetic")]);
+    h.config.correction.order = ["fixture/one", "fixture/two/slashed"];
+    const warnings: string[] = [];
+    assert.deepEqual(await correct("raw synthetic", h.config, new AbortController().signal, session(), h.registry, {
+      warning: (failed, category, next) => warnings.push(`${failed}: ${category}; ${next}`),
+    }), { kind: "corrected", text: "corrected synthetic" });
+    assert.deepEqual(warnings, [`fixture/one: ${reason}; fixture/two/slashed`]);
+    assert.doesNotMatch(warnings.join("\n"), /EXCLUDED|synthetic private provider error/);
+    assert.equal(h.calls.length, 2);
+  });
+}
