@@ -109,6 +109,9 @@ is not proof of semantic resistance to adversarial text.
 Ordinary correction exhaustion gives guarded raw dictation plus a notice or leaves
 manual drafts unchanged. Invalid thinking policy stops locally with a red error;
 unused later tuning cannot reject an earlier success. Cancellation gives no result.
+Fallback warnings distinguish provider failure, truncated/aborted/incomplete
+responses, empty output, tool calls, oversized output and invalid text using
+static categories, never response content or raw provider errors.
 
 ### Configuration and UI
 
@@ -129,8 +132,19 @@ non-TUI metadata does not enable recording or editor access.
 
 ## Automated evidence
 
-**338 synthetic tests and typechecking pass** against Pi 0.99.2 on Node 22.19.0,
-24.21.0 and the Node 26.10.0 development environment.
+The latest full local baseline passed **338 synthetic tests and typechecking**
+against Pi 0.99.2 on Node 22.19.0, 24.21.0 and 26.10.0. The supplied hosted Node
+24.21.0 run passed typechecking but failed three recorder-success tests (335/338
+passed), each exceeding a test-only 50 ms graceful-stop deadline.
+
+A delayed synthetic finalization reproduces that failure deterministically.
+Successful recorder fixtures now use the production-sized three-second budget;
+deliberate hung-stop fixtures retain their short deadline. Production timeouts
+are unchanged. Focused Node 24.21.0 typechecking and all 25 recorder tests pass;
+20 further runs of four normal/delayed-stop cases also pass (80 executions).
+Tested recorder inputs were unchanged. A hosted rerun is still needed to confirm
+the CI fix. The diagnostic/model-name changes separately pass typechecking and
+26 focused correction/config tests on Node 26.10.0; no full matrix was rerun.
 
 | Area | Coverage |
 | --- | --- |
@@ -155,16 +169,33 @@ panels are synthetic: these tests are not a complete live Pi session or reload.
 
 ## Live acceptance
 
-The owner confirms help works as expected on their setup. Exact layout, aliases
-and root/status coverage were not reported, so this is not universal UI acceptance.
-A GitHub-hosted CI run was reported started; its outcome has not been verified in
-this development record.
+The owner reports roughly **100 capture/correction runs** and accepts:
 
-Remaining acceptance includes microphone first/last words and timing, actual
-STT/auth routes, correction quality and thinking controls, physical terminal/tmux
-shortcuts, busy/compaction/navigation/reload, clipboard/image references, and
-stock/replacement/compositor layouts. Test normal Linux and containerized (or
-“boxed”) setups, where Pi runs inside a container; see
+- **V2 microphone capture:** works as expected, including Bluetooth; failures
+  are helpful.
+- **V4 correction/model quality:** acceptable; possible prompt/config tuning is
+  optional, with no urgent need.
+- **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
+  workflow and is good enough. Help was also previously owner-confirmed.
+
+These are owner-reported live observations, not an independently measured matrix
+for every provider, thinking level, terminal or footer variant. No utterances,
+recordings or private configuration are retained.
+
+| ID | Target | Current acceptance |
+| --- | --- | --- |
+| V1 | Installation/container setup | Fresh-install/recovery cases remain open |
+| V2 | Microphone capture | Owner-accepted, including Bluetooth |
+| V3 | STT/auth/fallback | Basic flow exercised; routing/auth/fallback cases remain open |
+| V4 | Correction/model quality | Owner-accepted; tuning optional |
+| V5 | F7/draft preservation | Clipboard/images, undo and edit-cancellation cases remain open |
+| V6 | Busy/lifecycle paths | Live busy/compaction/navigation/reload cases remain open |
+| V7 | Keys/presentation | Owner-accepted for Neovim/tmux workflow |
+| V8 | Preferences/persistence | Live selection/fallback/save/reload cases remain open |
+| V9 | CI/release hygiene | Hosted Node 24 failed; fixture fix validation and dependency review remain open |
+
+For additional deployment coverage, distinguish normal Linux from containerized
+(or “boxed”) setups, where Pi runs inside a container; see
 [piinabox](https://github.com/7h145/piinabox). Container audio requires explicit
 host approval and is separate from provider networking.
 
