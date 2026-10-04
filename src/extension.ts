@@ -13,6 +13,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { ProfileSelection, safeLabel } from "./profiles.ts";
+import { loadInstallationIdentity, installationLabel, type InstallationIdentity } from "./version.ts";
 import { ACTIONS, DEFAULT_BINDINGS, nativeSafe, type Action, type Bindings } from "./keys.ts";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { ConfigError, ConfigStore, transcriptionKey, type Config } from "./config.ts";
@@ -54,6 +55,7 @@ const COMMAND_HELP = [
 ].join("\n");
 type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile">;
 export interface Dependencies {
+  identity: () => Promise<InstallationIdentity>;
   store: Store; record: Pipeline["record"]; transcribe: typeof transcribe; correct: typeof correct;
   key: typeof transcriptionKey; prepare: typeof prepareAudio; sources: typeof listRecordingSources; clock: () => number;
 }
@@ -113,13 +115,14 @@ class Feedback {
 
 /** Factory has no processes, timers, config I/O or provider work. */
 export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependencies> = {}) {
-  const deps: Dependencies = { store: new ConfigStore(getAgentDir()), record: recordParecord, transcribe, correct,
+  const deps: Dependencies = { identity: loadInstallationIdentity, store: new ConfigStore(getAgentDir()), record: recordParecord, transcribe, correct,
     key: transcriptionKey, prepare: prepareAudio, sources: listRecordingSources, clock: () => performance.now(), ...overrides };
   const controller = new OperationController(), selection = new ProfileSelection();
   let scope: Scope | undefined, owner: DeliveryOwner | undefined;
   let initialized = false, keysInstalled = false, changing = 0, reloading = 0, epoch = 0, configError: string | undefined;
   let activeBindings: Bindings = structuredClone(DEFAULT_BINDINGS);
   for (const action of ACTIONS) activeBindings[action] = [];
+  let identity: InstallationIdentity = {}, identityReady: Promise<void> | undefined;
   let activeProfile: string | undefined;
   let registeredBindings: Bindings | undefined;
   const live = (candidate: Scope): boolean => {
@@ -184,7 +187,9 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     scope = current;
     try { current.boundary = installEditorBoundary(pi, ctx, () => controller.cancel("submitted"), () => controller.contentChanged()); }
     catch { error(ctx, "pi-oaistt requires the stock Pi editor; another editor is installed."); }
+    identityReady ??= Promise.resolve().then(() => deps.identity()).then(value => { identity = value; }).catch(() => {});
     if (!initialized) { initialized = true; await load(ctx); }
+    await identityReady;
     if (!live(current)) return;
     installKeys(current);
     if (current.boundary?.isInstalled() && selection.config) notice(ctx, "pi-oaistt ready. Defaults: F8 dictation, F7 draft correction, F12 cancel; /oaistt help lists active controls.");
@@ -293,7 +298,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})`
       : safeLabel(selector)).join(" → ") || "none (no requests)";
     const lines = [
-      `${label("oaistt")} ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. ${label("Config")} ${config ? "ready" : "unavailable"}.`,
+      `${label(installationLabel(identity))} ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. ${label("Config")} ${config ? "ready" : "unavailable"}.`,
       "",
       row("Transcription", `active: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}; fallback: ${fallback}.`),
       row("Correction", config ? `automatic ${config.correction.automatic ? "on" : "off"}; next order: ${models}.` : "unavailable."),

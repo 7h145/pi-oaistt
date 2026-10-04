@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { discoverAndLoadExtensions, ExtensionRunner, ModelRegistry, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { createPiUI } from "./pi-ui-fixture.ts";
+import { loadInstallationIdentity, installationLabel } from "../src/version.ts";
 
 test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands and restores editor on shutdown", async () => {
   const dir = await mkdtemp(join(tmpdir(), "oaistt-load-test-"));
@@ -51,6 +52,9 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     assert.ok(notices.some((text) => text.includes("pi-oaistt ready")));
     assert.ok(notices.some((text) => text.includes("F8 dictation")));
     assert.ok(notices.some((text) => text.replace(/\x1b\[[0-9;]*m/g, "").includes("Config: ready")));
+    const installed = await loadInstallationIdentity(product);
+    assert.equal(installed.version, "0.2.0");
+    assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes(`${installationLabel(installed)}: idle.`)));
     native.ui.setEditorText("synthetic retained draft");
     await command.handler("recorder source", runner.createCommandContext());
     assert.equal(native.mode.extensionInput, undefined);

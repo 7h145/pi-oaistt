@@ -240,6 +240,16 @@ from manual F7, and is not tracked or rewritten after insertion.
 
 Bare `/oaistt` shows concise help/status. `/oaistt help` lists commands and
 exact aliases, default/active controls, pending bindings and safe usage.
+The status header identifies the loaded installation, for example
+`oaistt v0.2.0 (1234abc): idle. Config: ready.` Version comes from its own
+`package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
+not a guarantee of an unchanged working tree. Git is optional: npm/non-Git installs
+show the version alone. Only Git metadata at the resolved package root is used;
+the working project, Pi repository and parent repositories are never searched.
+Identity is cached once per interactive extension runtime, so status calls do not
+spawn Git. Missing/malformed metadata cannot block dictation; unavailable version
+metadata leaves the plain `oaistt` header. No paths or Git diagnostics are displayed.
+
 `/oaistt status` uses aligned, theme-accented bold labels, ordered as
 Transcription, Correction, Capture device, and Active keys. Transcription separates the
 active operation's profile from the next selection and saved default; its brief

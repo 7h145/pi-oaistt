@@ -36,7 +36,7 @@ const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
 function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean;
-  store?: Dependencies["store"]; sources?: Dependencies["sources"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
+  identity?: Dependencies["identity"]; store?: Dependencies["store"]; sources?: Dependencies["sources"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
     mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings, notifications: options.nativeNotifications });
   const notices: string[] = [];
@@ -97,6 +97,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   } as unknown as ExtensionAPI;
   const actualCorrection = options.correction;
   const result = registerDictation(pi, {
+    identity: options.identity ?? (async () => ({ version: "0.2.0" })),
     store: options.store ?? { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {}, saveProfile: async () => {} },
     prepare: async () => new Uint8Array(), key: () => undefined, clock: () => clock,
     sources: options.sources ?? (async () => []),
@@ -254,7 +255,7 @@ test("invalid config blocks capture; explicit config reload recovers", async () 
     const { controller } = registerDictation({ getCommands: native.pi.getCommands,
       on: (name: string, handler: any) => { handlers.set(name, handler); },
       registerCommand: (_name: string, value: typeof command) => { command = value; }, registerShortcut: () => {}, registerTool: () => {},
-    } as unknown as ExtensionAPI, { store, prepare: async () => new Uint8Array(), key: (config) => {
+    } as unknown as ExtensionAPI, { identity: async () => ({ version: "0.2.0" }), store, prepare: async () => new Uint8Array(), key: (config) => {
       if (config.auth.type !== "none") throw new Error("synthetic key details"); return undefined;
     }, record: () => { starts++; throw new Error("synthetic backend"); } });
     await writeFile(store.path, '{"unknown":"synthetic private value"}');
@@ -549,7 +550,7 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.match(rendered, /dictation toggle/); assert.match(rendered, /recorder sources/);
     assert.match(rendered, /transcription source NAME/); assert.match(rendered, /Defaults/);
-    assert.match(rendered, /Active keys/); assert.match(rendered, /oaistt: idle/);
+    assert.match(rendered, /Active keys/); assert.match(rendered, /oaistt v0\.2\.0: idle/);
     assert.equal(h.notices.length, 1);
     const text = h.notices[0]!;
     assert.ok(text.includes("oaistt command help (with abbreviations in parenthesis)"));
@@ -563,7 +564,7 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     for (const width of [40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
   }
   h.notices.length = 0; await h.command("");
-  assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt help/); assert.match(h.notices[0]!, /oaistt: idle/);
+  assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt help/); assert.match(h.notices[0]!, /oaistt v0\.2\.0: idle/);
   assert.ok(h.notices[0]!.length < 1000); assert.equal(h.controller.active, false);
   assert.equal(h.ui.getEditorText(), "PRIVATE_SYNTHETIC_DRAFT");
   assert.deepEqual(h.counts(), counts); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
@@ -614,7 +615,7 @@ test("status-only output omits command help; extra help/status arguments stay in
   const h = harness({ nativeNotifications: true }); await h.start();
   for (const args of ["status", "s"]) {
     h.notices.length = 0; await h.command(args);
-    assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt: idle/);
+    assert.equal(h.notices.length, 1); assert.match(h.notices[0]!, /oaistt v0\.2\.0: idle/);
     assert.match(h.notices[0]!, /Capture device:\s+server default source/);
     assert.doesNotMatch(h.notices[0]!, /command help|dictation toggle|Defaults:/);
   }
@@ -804,4 +805,33 @@ test("capture device labels are control-stripped and bounded", async () => {
   await h.start(); await h.command("status");
   const line = h.notices.at(-1)!.split("\n").find(line => line.startsWith("Capture device:"))!;
   assert.equal(line, `Capture device: fixture${"x".repeat(57)}.`);
+});
+
+for (const commit of [undefined, "1234abc"]) test(`status identifies loaded installation, optional commit=${commit ?? "none"}`, async () => {
+  let reads = 0;
+  const h = harness({ identity: async () => { reads++; return { version: "0.2.0", commit }; } });
+  assert.equal(reads, 0); // No factory/import probe.
+  await h.start();
+  for (const args of ["", "help", "status", "s", "reload"]) {
+    await h.command(args);
+    assert.ok(h.notices.at(-1)!.includes(`oaistt v0.2.0${commit ? ` (${commit})` : ""}: idle. Config: ready.`));
+  }
+  await h.emit("session_shutdown", { reason: "reload" }); await h.start(); await h.command("status");
+  assert.equal(reads, 1);
+  assert.equal(h.counts().captures, 0); assert.equal(h.promptCalls.length, 0); assert.equal(h.main.signal.aborted, false);
+});
+
+test("installation metadata failure cannot block settings or capture controls", async () => {
+  const h = harness({ identity: async () => { throw new Error("EXCLUDED_SYNTHETIC_METADATA"); } });
+  await h.start(); await h.command("status");
+  assert.match(h.notices.at(-1)!, /oaistt: idle\. Config: ready/);
+  assert.doesNotMatch(h.notices.at(-1)!, /EXCLUDED_SYNTHETIC_METADATA/);
+  h.f8(); await nextTask(); assert.equal(h.controller.phase, "recording");
+  await h.command("cancel"); await h.controller.settled();
+});
+
+for (const mode of ["rpc", "json", "print"] as const) test(`non-TUI ${mode} does not probe installation identity`, async () => {
+  let reads = 0;
+  const h = harness({ mode, identity: async () => { reads++; return { version: "0.2.0" }; } });
+  await h.start(); assert.equal(reads, 0);
 });

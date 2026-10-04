@@ -134,7 +134,8 @@ Bare **`/oaistt`** shows concise help and status; it does not start recording.
 Use **`/oaistt help`** for commands, aliases, default/active shortcuts, and
 pending key changes. **`/oaistt status`** shows the current operation,
 transcription selection, correction model order, transcription fallback policy,
-and capture device without the command list.
+and capture device without the command list. The header includes the installed
+package version and, for Git checkouts, its seven-character commit hash.
 
 Only one dictation or correction operation runs at a time. Pressing F8
 while transcription, correction, or cleanup is underway reports the

@@ -28,7 +28,8 @@ npm test
 The lockfile pins development dependencies. Dependency lifecycle scripts are not
 needed for the synthetic suite. Production imports use Pi's public root exports;
 Pi supplies runtime peer modules to loaded extensions. No microphone, personal
-configuration or real provider credentials are required for tests.
+configuration or real provider credentials are required for tests. Synthetic Git
+integration fixtures require the Git client; Git is optional at runtime.
 
 [GitHub Actions CI](.github/workflows/ci.yml) runs locked installs, typechecking
 and tests on Ubuntu with Node 22.19.0 and 24. It isolates Pi settings in temporary
@@ -148,15 +149,27 @@ Owned dictation uses its frozen source even after settings change or fail to rel
 idle/manual status uses current settings. No audio query is made. Missing state
 reports unavailable, and theme styling is computed on request.
 
+Installed identity is read once at interactive session start, independently of
+settings/profile initialization. Version comes from the resolved module's own
+package manifest. Only a Git directory/worktree gitfile at that package root
+permits an optional, bounded read-only HEAD query; no parent search or inherited
+Git directory/worktree overrides, trace output or global Git configuration. Git
+failure retains version-only status; metadata failure does not block controls.
+Neither import/factory, non-TUI startup nor subsequent status calls probe identity.
+The hash identifies checkout HEAD, not a clean-worktree or immutable-build claim.
+
 ## Automated evidence
 
-**Latest full baseline: 394 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
+**Latest full baseline: 422 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
 22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
 verified unchanged tested-source/documentation hashes before commit.
 
-The subsequent owner-approved help wording change passes four focused help/status
-tests on Node 22.19.0, including native regular/fullscreen rendering and pending
-keys. This strings-only update has no full-suite or typecheck rerun, as requested.
+The full matrix includes approved help wording and installed-identity coverage:
+version-only npm/parent-repository cases, real local Git/worktree fixtures,
+symlinked paths, SHA-1/SHA-256 formatting, malformed/missing metadata, ambient
+repository overrides, an unresponsive Git client, single-runtime caching,
+non-TUI non-probing and real Pi
+symlink discovery/jiti rendering. No new live terminal/provider test is claimed.
 
 Successful recorder fixtures use the production-sized three-second grace budget;
 deliberate hung-stop fixtures retain a short deadline. Production timeouts are
