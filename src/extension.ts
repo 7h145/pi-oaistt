@@ -18,7 +18,7 @@ import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil
 import { ConfigError, ConfigStore, transcriptionKey, type Config } from "./config.ts";
 import { correct } from "./correction.ts";
 import { installEditorBoundary, type EditorBoundary } from "./editor.ts";
-import { OperationController, type DeliveryOwner, type Phase, type Pipeline, type OperationKind } from "./operation.ts";
+import { DictationError, OperationController, type DeliveryOwner, type Phase, type Pipeline, type OperationKind } from "./operation.ts";
 import { recordParecord, listRecordingSources } from "./recorder.ts";
 import { transcribe, prepareAudio, transcriptionChain, TranscriptionFailure } from "./transcription.ts";
 
@@ -321,7 +321,10 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     if (action === "transcription list") { notice(ctx, JSON.stringify(selection.metadata(activeProfile))); return; }
     if (action === "recorder sources") {
       try { const sources = await deps.sources(current.abort.signal); if (live(current)) notice(ctx, JSON.stringify(sources)); }
-      catch { if (live(current) && !current.abort.signal.aborted) error(ctx, "Cannot list recording sources; check pactl/server access."); }
+      catch (failure) {
+        if (live(current) && !current.abort.signal.aborted) error(ctx, failure instanceof DictationError
+          ? failure.message : "Cannot list recording sources; check Pulse server access.");
+      }
       return;
     }
     const group = p[0] === "r" && p[1] === "s" ? "recorder" : p[0] === "t" && p[1] === "s" ? "transcription" : p[1] === "source" ? p[0] : undefined;

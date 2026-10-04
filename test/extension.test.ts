@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { fauxProvider, fauxAssistantMessage, type AssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { correct as realCorrect } from "../src/correction.ts";
+import { DictationError } from "../src/operation.ts";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -35,7 +36,7 @@ const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
 function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean;
-  store?: Dependencies["store"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
+  store?: Dependencies["store"]; sources?: Dependencies["sources"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
     mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings, notifications: options.nativeNotifications });
   const notices: string[] = [];
@@ -97,6 +98,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   const result = registerDictation(pi, {
     store: options.store ?? { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {}, saveProfile: async () => {} },
     prepare: async () => new Uint8Array(), key: () => undefined, clock: () => clock,
+    sources: options.sources ?? (async () => []),
     record: (config, signal) => { captures++; signals.push(signal); settings.push(config);
       return { ready: ready.promise, stop: async () => { stops++; return { path: "/synthetic.wav", bytes: 100 }; },
         dispose: () => { disposals++; return cleanup; } };
@@ -638,3 +640,19 @@ for (const automatic of [true, false]) for (const state of ["empty", "configured
     assert.equal(h.notices.filter(n => /Correction unavailable/.test(n)).length, attempt && state !== "configured" ? 1 : 0);
     assert.equal(h.main.signal.aborted, false);
   });
+
+for (const action of ["recorder sources", "r l"]) {
+  test(`${action}: preserve safe missing-tool diagnostics without capture or main-agent changes`, async () => {
+    const message = "Missing audio tools: pactl (package: pulseaudio-utils)";
+    const h = harness({ sources: async () => { throw new DictationError(message); } });
+    await h.start(); await h.command(action);
+    assert.equal(h.notices.at(-1), message); assert.equal(h.categories.at(-1), "error");
+    assert.equal(h.counts().captures, 0); assert.equal(h.main.signal.aborted, false);
+  });
+}
+
+test("source-list failures redact unknown errors rather than exposing backend stderr", async () => {
+  const h = harness({ sources: async () => { throw new Error("EXCLUDED_SYNTHETIC_DIAGNOSTICS"); } });
+  await h.start(); await h.command("recorder sources");
+  assert.equal(h.notices.at(-1), "Cannot list recording sources; check Pulse server access.");
+});

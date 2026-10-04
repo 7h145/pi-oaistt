@@ -21,8 +21,37 @@ import type { Config } from "./config.ts";
 import { validateWav } from "./wav.ts";
 
 const exec = promisify(execFile);
-type Exit = { code: number | null; signal: NodeJS.Signals | null; spawnError?: boolean };
+type Exit = { code: number | null; signal: NodeJS.Signals | null; spawnError?: boolean; missingTool?: boolean };
+type AudioTool = "pactl" | "parecord";
+const missingAudioTools = (tools: readonly AudioTool[]) =>
+  new DictationError(`Missing audio tools: ${tools.join(", ")} (package: pulseaudio-utils)`);
+
+/** Read-only version probes, only when recording is requested; never install. */
+export async function checkAudioTools(signal: AbortSignal,
+  probe: (tool: AudioTool, signal: AbortSignal) => Promise<void> = async (tool, signal) => {
+    await exec(tool, ["--version"], {
+      signal, timeout: 2500, killSignal: "SIGKILL", maxBuffer: 16 * 1024,
+    });
+  },
+): Promise<void> {
+  const missing: AudioTool[] = [];
+  for (const tool of ["pactl", "parecord"] as const) {
+    signal.throwIfAborted();
+    try { await probe(tool, signal); }
+    catch (error) {
+      signal.throwIfAborted();
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT") missing.push(tool);
+      // A normal nonzero exit still proves the executable was found.
+      else if (typeof code !== "number") throw new DictationError("Cannot check audio tools; check executable access.");
+    }
+    signal.throwIfAborted();
+  }
+  if (missing.length) throw missingAudioTools(missing);
+}
+
 export interface RecorderPlatform {
+  checkTools(signal: AbortSignal): Promise<void>;
   query(args: string[], signal: AbortSignal): Promise<string>;
   spawn(command: string, args: string[], options: SpawnOptions): ChildProcess;
   tempRoot: string;
@@ -35,15 +64,17 @@ export interface RecorderPlatform {
   graceMs?: number;
 }
 const platform: RecorderPlatform = {
+  checkTools: checkAudioTools,
   query: async (args, signal) => {
     try {
       const result = await exec("pactl", args, {
         signal, timeout: 2500, killSignal: "SIGKILL", maxBuffer: 1024 * 1024,
       });
       return result.stdout;
-    } catch {
+    } catch (error) {
       signal.throwIfAborted();
-      throw new DictationError("Cannot inspect recording source; check pactl and Pulse server access.");
+      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") throw missingAudioTools(["pactl"]);
+      throw new DictationError("Cannot inspect recording source; check Pulse server access.");
     }
   },
   spawn, tempRoot: tmpdir(),
@@ -109,6 +140,8 @@ class ParecordRecording implements Recording {
   async #setup(): Promise<void> {
     const signal = this.#abort.signal;
     signal.throwIfAborted();
+    await this.#host.checkTools(signal);
+    signal.throwIfAborted();
     const source = await recordingSource(this.#config, signal, this.#host);
     signal.throwIfAborted();
     this.#dir = await mkdtemp(join(this.#host.tempRoot, "pi-oaistt-"));
@@ -127,7 +160,9 @@ class ParecordRecording implements Recording {
     });
     // Discard backend diagnostics: they can contain device paths or other data.
     this.#child.stderr?.resume();
-    this.#child.once("error", () => this.#finishExit({ code: null, signal: null, spawnError: true }));
+    this.#child.once("error", (error: NodeJS.ErrnoException) => this.#finishExit({
+      code: null, signal: null, spawnError: true, missingTool: error.code === "ENOENT",
+    }));
     this.#child.once("exit", (code, signal) => this.#finishExit({ code, signal }));
     this.#duration = setTimeout(() => {
       if (this.#disposed || this.#abort.signal.aborted || this.#stopping) return;
@@ -188,8 +223,8 @@ class ParecordRecording implements Recording {
     this.#exit = exit;
     this.#resolveExit(exit);
     if (!this.#stopping && !this.#disposed && !this.#abort.signal.aborted) {
-      const error = new DictationError(exit.spawnError
-        ? "Cannot start parecord; check the recorder dependency."
+      const error = exit.missingTool ? missingAudioTools(["parecord"]) : new DictationError(exit.spawnError
+        ? "Cannot start parecord; check executable access."
         : "Recorder stopped unexpectedly; audio discarded.");
       this.#hooks.fail(error);
       this.#abort.abort(error);
@@ -285,7 +320,11 @@ export async function listRecordingSources(signal: AbortSignal, host: Pick<Recor
   const current = (await host.query(["get-default-source"], signal)).trim();
   let sources: unknown;
   try { sources = JSON.parse(await host.query(["--format=json", "list", "sources"], signal)); }
-  catch { throw new DictationError("Pulse source information is incompatible."); }
+  catch (error) {
+    signal.throwIfAborted();
+    if (error instanceof DictationError) throw error;
+    throw new DictationError("Pulse source information is incompatible.");
+  }
   signal.throwIfAborted();
   if (!Array.isArray(sources)) throw new DictationError("Pulse source information is incompatible.");
   return sources.slice(0, 64).filter(s => s && typeof s.name === "string").map(s => ({

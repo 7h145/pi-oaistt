@@ -13,14 +13,15 @@
 
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseConfig } from "../src/config.ts";
-import { recordParecord, type RecorderPlatform } from "../src/recorder.ts";
-import type { Recording } from "../src/operation.ts";
+import { checkAudioTools, listRecordingSources, recordParecord, type RecorderPlatform } from "../src/recorder.ts";
+import { DictationError, type Recording } from "../src/operation.ts";
 import { validateWav } from "../src/wav.ts";
 import { fixtureWav } from "./audio-fixture.ts";
 
@@ -37,6 +38,7 @@ async function platform(mode = "normal", changes: Partial<RecorderPlatform> = {}
   let pid: number | undefined;
   let limits = 0;
   const host: Partial<RecorderPlatform> = {
+    checkTools: async () => {}, // synthetic tools; never depend on host audio clients
     tempRoot: dir, sourceEnv: undefined, pollMs: 5, startupMs: 1000, graceMs: 50, terminateMs: 50, killMs: 1000,
     query: async (args) => args[0] === "get-default-source" ? "fixture-mic\n"
       : JSON.stringify([{ name: "fixture-mic", mute: false, monitor_of_sink: null }]),
@@ -118,7 +120,7 @@ test("spawn error and size overflow are redacted and leave no files", async () =
   const missing = await platform("normal", {
     spawn: (_command, _args, options) => spawn("/nonexistent-synthetic-recorder", [], options),
   });
-  const failed = missing.record(); await assert.rejects(failed.ready); await failed.dispose();
+  const failed = missing.record(); await assert.rejects(failed.ready, /Missing audio tools: parecord \(package: pulseaudio-utils\)/); await failed.dispose();
   assert.deepEqual(await readdir(missing.dir), []);
   const big = await platform("oversize");
   const tooLarge = big.record({ recorder: { maxBytes: 1024 } });
@@ -192,4 +194,98 @@ test("explicit source listing is bounded read-only metadata without Pulse proper
   } });
   assert.equal(items[0]!.default, true); assert.equal(items[1]!.monitor, true); assert.equal(items[1]!.muted, true);
   assert.doesNotMatch(JSON.stringify(items), /EXCLUDED|properties/); assert.ok(queries.every(args => !args[0]!.startsWith("set-")));
+});
+
+for (const missing of [[], ["pactl"], ["parecord"], ["pactl", "parecord"]]) {
+  test(`audio dependency hint lists only missing tools: ${missing.join(",") || "none"}`, async () => {
+    const seen: string[] = [];
+    const work = checkAudioTools(new AbortController().signal, async tool => {
+      seen.push(tool);
+      if (missing.includes(tool)) throw Object.assign(new Error("EXCLUDED_SYNTHETIC_DIAGNOSTICS"), { code: "ENOENT" });
+    });
+    if (missing.length) await assert.rejects(work, {
+      name: "DictationError", message: `Missing audio tools: ${missing.join(", ")} (package: pulseaudio-utils)`,
+    });
+    else await work;
+    assert.deepEqual(seen, ["pactl", "parecord"]);
+  });
+}
+
+test("audio dependency checks distinguish execution faults/nonzero exits and honor cancellation", async () => {
+  await assert.rejects(checkAudioTools(new AbortController().signal, async () => {
+    throw Object.assign(new Error("EXCLUDED_SYNTHETIC_DIAGNOSTICS"), { code: "EACCES" });
+  }), { name: "DictationError", message: "Cannot check audio tools; check executable access." });
+  // Even a client that rejects --version was found; leave real query errors separate.
+  await checkAudioTools(new AbortController().signal, async () => { throw { code: 1 }; });
+  const abort = new AbortController(); const reason = new Error("Synthetic cancellation"); let probes = 0;
+  await assert.rejects(checkAudioTools(abort.signal, async () => {
+    probes++; abort.abort(reason); throw { code: "ENOENT" };
+  }), error => error === reason);
+  assert.equal(probes, 1);
+  await assert.rejects(checkAudioTools(abort.signal, async () => { probes++; }), error => error === reason);
+  assert.equal(probes, 1);
+});
+
+test("missing dependencies fail before source queries, recorder spawn or private capture creation", async () => {
+  let queries = 0;
+  const h = await platform("normal", {
+    checkTools: signal => checkAudioTools(signal, async () => { throw { code: "ENOENT" }; }),
+    query: async () => { queries++; throw new Error("Source query must not run"); },
+  });
+  const recording = h.record();
+  await assert.rejects(recording.ready, { message: "Missing audio tools: pactl, parecord (package: pulseaudio-utils)" });
+  await recording.dispose();
+  assert.equal(queries, 0); assert.equal(h.calls.length, 0);
+  assert.deepEqual(await readdir(h.dir), []);
+});
+
+test("source listing preserves safe query diagnostics and cancellation, but redacts unknown failures", async () => {
+  const abort = new AbortController(); const safe = new DictationError("Missing audio tools: pactl (package: pulseaudio-utils)");
+  for (const failure of [safe, new Error("EXCLUDED_SYNTHETIC_DIAGNOSTICS")]) {
+    await assert.rejects(listRecordingSources(abort.signal, { query: async args => {
+      if (args[0] === "get-default-source") return "fixture-mic";
+      throw failure;
+    } }), { message: failure === safe ? safe.message : "Pulse source information is incompatible." });
+  }
+  const reason = new Error("Synthetic cancellation");
+  await assert.rejects(listRecordingSources(abort.signal, { query: async args => {
+    if (args[0] === "get-default-source") return "fixture-mic";
+    abort.abort(reason); throw safe;
+  } }), error => error === reason);
+});
+
+test("real isolated PATH lookup distinguishes missing tools from redacted server failures", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "oaistt-empty-path-")); dirs.push(dir);
+  const module = new URL("../src/recorder.ts", import.meta.url).href;
+  const code = `
+    import { recordParecord, listRecordingSources } from ${JSON.stringify(module)};
+    import { parseConfig } from ${JSON.stringify(new URL("../src/config.ts", import.meta.url).href)};
+    const signal = new AbortController().signal;
+    const recording = recordParecord(parseConfig({}), signal, { limit() {}, fail() {} });
+    try { await recording.ready; } catch (error) { console.log(error.message); }
+    await recording.dispose();
+    try { await listRecordingSources(signal); } catch (error) { console.log(error.message); }
+  `;
+  const run = async () => {
+    const result = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", code], {
+      env: { PATH: dir }, timeout: 10000, maxBuffer: 16 * 1024,
+    });
+    return result.stdout.trim().split("\n");
+  };
+  assert.deepEqual(await run(), [
+    "Missing audio tools: pactl, parecord (package: pulseaudio-utils)",
+    "Missing audio tools: pactl (package: pulseaudio-utils)",
+  ]);
+  // Synthetic clients: --version succeeds; queries fail without any real server.
+  const client = '#!/bin/sh\nif [ "$1" = "--version" ]; then exit 0; fi\nprintf "%s\\n" "EXCLUDED_SYNTHETIC_DIAGNOSTICS" >&2\nexit 1\n';
+  await writeFile(join(dir, "pactl"), client, { mode: 0o700 });
+  assert.deepEqual(await run(), [
+    "Missing audio tools: parecord (package: pulseaudio-utils)",
+    "Cannot inspect recording source; check Pulse server access.",
+  ]);
+  await writeFile(join(dir, "parecord"), client, { mode: 0o700 });
+  assert.deepEqual(await run(), [
+    "Cannot inspect recording source; check Pulse server access.",
+    "Cannot inspect recording source; check Pulse server access.",
+  ]);
 });

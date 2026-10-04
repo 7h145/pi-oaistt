@@ -422,6 +422,8 @@ Access to a transcription server is separate from microphone access.
 Start with **`/oaistt status`** and **`/oaistt help`**. A ready notice
 confirms loading, not microphone capture, credentials, or provider health.
 
+- **Missing audio tools:** on Debian-family systems, install `pulseaudio-utils`
+  where Pi runs, then retry. The extension never installs packages.
 - **No REC or no usable audio:** check `pactl`/`parecord` availability,
   server access, microphone permission, and the selected source. Muted,
   missing, and playback-monitor sources are rejected; another input is

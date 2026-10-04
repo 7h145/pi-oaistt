@@ -105,7 +105,12 @@ must supply its own `order` and `profiles`, even if only changing tuning.
 
 Provide `parecord`/`pactl` and an existing Pulse/PipeWire-Pulse connection. On Debian
 family images, explicitly provision client tools with `pulseaudio-utils`; no host
-daemon is needed. The extension never installs packages at startup.
+daemon is needed. The extension never installs packages.
+
+Recording checks both tools before querying sources or creating capture files.
+Missing executables are reported by name, for example:
+`Missing audio tools: pactl, parecord (package: pulseaudio-utils)`.
+Server-access failures are separate; source listing requires only `pactl`.
 
 Omitted/null source resolves the **server's current recording default at capture
 start**, ignoring `PULSE_SOURCE` as a route override. A named override is passed as

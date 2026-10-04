@@ -76,6 +76,12 @@ server recording default at capture start, or use the explicit source override;
 `PULSE_SOURCE` is not an override. Reject muted, missing and monitor sources.
 No host defaults, volume or routing are changed.
 
+Recording first probes `pactl`/`parecord` with bounded, cancellable `--version`
+requests. Missing tools get a short `pulseaudio-utils` package hint, separate from
+server or executable-access failures. No package installation or startup probing
+is performed. Source-list commands preserve safe diagnostics and redact other
+errors; version/query stdout and stderr are never echoed.
+
 Audio uses private temporary storage, mono PCM16 at 16 kHz, bounded duration/size,
 and validated WAV finalization. REC means audio bytes arrived, not merely that a
 child started. Graceful SIGINT timeout escalates only the owned detached process
@@ -123,14 +129,14 @@ non-TUI metadata does not enable recording or editor access.
 
 ## Automated evidence
 
-**327 synthetic tests and typechecking pass** against Pi 0.99.2. Clean temporary
-installs pass on Node 22.19.0/npm 10.9.9 and Node 24.21.0/npm 11.21.0; the suite also
-passes in the Node 26.10.0 development environment.
+**338 synthetic tests and typechecking pass** against Pi 0.99.2 on Node 22.19.0,
+24.21.0 and the Node 26.10.0 development environment.
 
 | Area | Coverage |
 | --- | --- |
 | Editor/ownership | Native regular/fullscreen, idle/busy/compaction capture, semantic paste/references/undo, eager manual edit cancellation, cursor/focus, no-op output, late completion and retained cleanup |
 | Correction | Automatic/manual with empty/configured/unavailable order, frozen current identity and deduplication, tuning/null/thinking errors, auth-ready empty-order non-dispatch, deadlines, context exclusions and immutable requests |
+| Recorder | Missing tool subsets, executable-access faults, cancellation, isolated PATH lookup with fake clients, redacted server failures and owned capture/cleanup |
 | STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
 | Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
 | UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, help/status rendering, bounded metadata, narrow/theme/footer layouts, pending keys and exact aliases |
