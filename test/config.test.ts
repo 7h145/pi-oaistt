@@ -180,10 +180,10 @@ test("documented JSON examples parse; defaults stay empty and recommendation req
   const defaults = readme.slice(readme.indexOf("### Full configuration and defaults")).match(/```json\n([\s\S]*?)\n```/)![1]!;
   assert.deepEqual(parseConfig(JSON.parse(defaults)), parseConfig({}));
   assert.equal(parseConfig({}).correction.automatic, true); assert.deepEqual(parseConfig({}).correction.order, []);
-  const recommendation = examples.find(e => e.correction?.order?.includes("openai-codex/gpt-6.1-luna"));
+  const recommendation = examples.find(e => e.correction?.order?.includes("openai-codex/gpt-6-luna"));
   assert.ok(recommendation); assert.equal(parseConfig(recommendation).correction.automatic, true);
-  assert.equal(recommendation.correction.order[0], "openai-codex/gpt-6.1-luna");
+  assert.equal(recommendation.correction.order[0], "openai-codex/gpt-6-luna");
   assert.deepEqual(parseConfig(recommendation).correction.order, recommendation.correction.order);
-  const explicitOther = parseConfig({ correction: { order: ["fixture/one"], modelSettings: { "openai-codex/gpt-6.1-luna": {} } } });
+  const explicitOther = parseConfig({ correction: { order: ["fixture/one"], modelSettings: { "openai-codex/gpt-6-luna": {} } } });
   assert.deepEqual(explicitOther.correction.order, ["fixture/one"]);
 });

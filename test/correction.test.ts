@@ -278,19 +278,19 @@ for (const automatic of [true, false]) for (const state of ["empty", "configured
 test("registered recommendation with usable auth/current identity never becomes an implicit candidate", async () => {
   const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, refreshOnCreate: false });
   const registry = new ModelRegistry(runtime);
-  const provider = fauxProvider({ provider: "openai-codex", models: [{ id: "gpt-6.1-luna" }] });
+  const provider = fauxProvider({ provider: "openai-codex", models: [{ id: "gpt-6-luna" }] });
   let authCalls = 0;
   provider.provider.auth.apiKey = { name: "synthetic auth", resolve: async () => { authCalls++; return { auth: { apiKey: "SYNTHETIC_AUTH_ONLY" } }; } };
   provider.setResponses([fauxAssistantMessage("explicit synthetic correction")]);
   registry.registerProvider(provider.provider);
   const noHistory = { buildSessionProjection: () => { throw new Error("empty order must not read history"); } };
-  const current = { provider: "openai-codex", id: "gpt-6.1-luna" };
-  for (const settings of [{}, { correction: {} }, { correction: { order: [], modelSettings: { "openai-codex/gpt-6.1-luna": {} } } }]) {
+  const current = { provider: "openai-codex", id: "gpt-6-luna" };
+  for (const settings of [{}, { correction: {} }, { correction: { order: [], modelSettings: { "openai-codex/gpt-6-luna": {} } } }]) {
     const config = parseConfig(settings);
     for (const manual of [false, true]) assert.deepEqual(await correct("raw synthetic", config, new AbortController().signal, noHistory, registry, { manual, current }), { kind: "exhausted" });
   }
   assert.equal(authCalls, 0); assert.equal(provider.state.callCount, 0);
-  const chosen = parseConfig({ correction: { automatic: false, order: ["openai-codex/gpt-6.1-luna"], context: { maxChars: 0 } } });
+  const chosen = parseConfig({ correction: { automatic: false, order: ["openai-codex/gpt-6-luna"], context: { maxChars: 0 } } });
   assert.deepEqual(await correct("raw synthetic", chosen, new AbortController().signal, session(), registry, { manual: true }), { kind: "corrected", text: "explicit synthetic correction" });
   assert.equal(provider.state.callCount, 1); assert.ok(authCalls > 0);
 });

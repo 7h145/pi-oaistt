@@ -179,7 +179,7 @@ appropriate for that content. To omit conversation history, set
 `correction.context.maxChars` to `0`.
 
 For example, this configuration enables automatic correction and tries
-`openai-codex/gpt-6.1-luna` first, with the current Pi session model as an
+`openai-codex/gpt-6-luna` first, with the current Pi session model as an
 explicit fallback. F7 uses the same list:
 
 ```json
@@ -187,7 +187,7 @@ explicit fallback. F7 uses the same list:
   "correction": {
     "automatic": true,
     "order": [
-      "openai-codex/gpt-6.1-luna",
+      "openai-codex/gpt-6-luna",
       "$current"
     ]
   }
@@ -204,7 +204,7 @@ does not inherit the main agent's thinking level. If both entries resolve
 to the same model, it is tried only once. Each correction starts at the
 top of the list and stops at the first valid result.
 
-`openai-codex/gpt-6.1-luna` is a recommended opt-in choice, not a shipped
+`openai-codex/gpt-6-luna` is a recommended opt-in choice, not a shipped
 default. Neither it nor `"$current"` is added automatically because you
 have credentials, a subscription, or the default Whisper setup. Verify
 that the model works for your setup; the recommendation is not live
