@@ -1,8 +1,8 @@
-# v0.2.0 live acceptance checklist
+# Live acceptance checklist
 
 Automated/native synthetic tests do not establish microphone completeness, physical
-keyboard delivery or provider quality. Historical v0.1 owner-confirmed local
-capture/draft/manual-submit success is not new v0.2 acceptance.
+keyboard delivery or provider quality. Validate the current build and chosen
+setup; one successful route does not establish the whole acceptance matrix.
 
 Use synthetic speech/text. Record only pass/fail, versions, broad deployment type,
 phase and timing—no audio, transcripts, credentials, device identifiers or private
@@ -10,14 +10,16 @@ configuration. Do not enable raw provider/terminal tracing.
 
 ## Prepare deliberately
 
-- Migrate the private v0.1 file explicitly; inspect actual endpoint/model/auth intent.
-  Earlier v0.2 files need `correction.enabled` renamed to `correction.automatic`,
-  preserving the boolean; the old name is rejected, not migrated automatically.
+- Review settings against the [configuration reference](configuration.md),
+  including the intended endpoint/model/auth and authorized data destinations.
   No file/transcription section means the built-in OpenAI profile.
 - Load code/keys with full Pi `/reload`, then inspect `/oaistt` help/status.
 - Confirm `pactl`/`parecord`, host-approved audio access and available unmuted microphone.
   Do not alter host defaults/volume or expose a socket merely for testing. Monitors
-  are not microphones. Boxed sockets can grant broad audio access/control.
+  are not microphones.
+- In a containerized (or “boxed”) setup, Pi runs inside a container; see
+  [piinabox](https://github.com/7h145/piinabox). Arrange explicitly approved host
+  audio access. A shared Pulse socket can grant broad audio access/control.
 - Begin with auto-correction disabled, fallback/marker off. Enable providers/features
   only when you intend their data exposure. Set history budget 0 if desired.
 

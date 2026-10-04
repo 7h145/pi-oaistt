@@ -444,7 +444,7 @@ test("settings-only reload keeps manual frozen lease/request; full shutdown canc
   await h.emit("session_shutdown", { reason: "reload" }); h.edited.resolve({ kind: "corrected", text: "late" }); await nextTask();
   assert.equal(h.ui.getEditorText(), "draft");
 });
-test("source no-name is read-only, legacy verbs/extra aliases cannot start or mutate", async () => {
+test("source no-name is read-only, unsupported verbs/aliases cannot start or mutate", async () => {
   const { h, original, disk } = await sourceHarness();
   for (const args of ["recorder source", "r s", "transcription source", "t s", "source fixture", "d s", "dictation", "transcription source --save"]) await h.command(args);
   assert.deepEqual(await disk(), original); assert.equal(h.mode.extensionInput, undefined); assert.equal(h.counts().captures, 0);

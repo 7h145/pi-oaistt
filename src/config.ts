@@ -38,7 +38,7 @@ export class ConfigError extends Error {
   constructor(message: string) { super(message); this.name = "ConfigError"; }
 }
 function fail(field: string): never {
-  throw new ConfigError(`Invalid pi-oaistt configuration: ${field}. Use the v0.2 order/maps schema; see migration documentation.`);
+  throw new ConfigError(`Invalid pi-oaistt configuration: ${field}. See docs/configuration.md.`);
 }
 function object(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail(field);
@@ -135,9 +135,6 @@ export function parseConfig(value: unknown): Config {
   const order = t.order.map(profileName);
   if (new Set(order).size !== order.length || order.some(name => !Object.hasOwn(profiles, name))) fail("transcription.order references/duplicates");
   const c = object(fallback(root.correction, {}), "correction");
-  if (Object.hasOwn(c, "enabled")) throw new ConfigError(
-    "Obsolete pi-oaistt configuration: correction.enabled. Rename to correction.automatic, preserving its boolean value; see migration documentation.",
-  );
   keys(c, ["automatic", "order", "modelSettings", "defaults", "context", "totalTimeoutSeconds"], "correction");
   const cd = tuning(object(fallback(c.defaults, {}), "correction.defaults"), { thinkingLevel: null, attemptTimeoutSeconds: 15 });
   const settings = object(fallback(c.modelSettings, {}), "correction.modelSettings");

@@ -151,23 +151,23 @@ test("symlinked and oversized configs rejected without modifying targets", async
   await assert.rejects(config.load(), ConfigError);
 });
 
-for (const enabled of [true, false, "SYNTHETIC_SECRET", null]) test(`obsolete enabled field is rejected with a targeted migration hint (${typeof enabled})`, () => {
+for (const enabled of [true, false, "SYNTHETIC_SECRET", null]) test(`unknown correction field is rejected without exposing values (${typeof enabled})`, () => {
   assert.throws(() => parseConfig({ correction: { enabled } }), (error: unknown) =>
-    error instanceof ConfigError && /correction\.enabled/.test(error.message) &&
-    /correction\.automatic/.test(error.message) && /preserv/i.test(error.message) && !error.message.includes("SYNTHETIC_SECRET"));
+    error instanceof ConfigError && /correction fields/.test(error.message) &&
+    error.message.includes("docs/configuration.md") && !error.message.includes("SYNTHETIC_SECRET"));
 });
-test("old and new flags together are rejected rather than using either", () => {
-  assert.throws(() => parseConfig({ correction: { enabled: true, automatic: false } }), /correction\.enabled/);
+test("unknown fields are rejected even alongside supported fields", () => {
+  assert.throws(() => parseConfig({ correction: { enabled: true, automatic: false } }), /correction fields/);
 });
 for (const value of [null, 0, "true", []]) test(`automatic requires a boolean (${JSON.stringify(value)})`, () => {
   assert.throws(() => parseConfig({ correction: { automatic: value } }), /correction\.automatic/);
 });
-test("legacy configuration load/save fails without rewriting or activating any model", async () => {
+test("unknown configuration fields prevent load/save without rewriting the file", async () => {
   const { dir, store: config } = await store();
   const bytes = JSON.stringify({ correction: { enabled: false, order: ["fixture/one"] } });
   await writeFile(config.path, bytes);
-  await assert.rejects(config.load(), /correction\.automatic/);
-  config.setSource("synthetic-input"); await assert.rejects(config.saveSource(), /correction\.automatic/);
+  await assert.rejects(config.load(), /correction fields/);
+  config.setSource("synthetic-input"); await assert.rejects(config.saveSource(), /correction fields/);
   assert.equal(await readFile(config.path, "utf8"), bytes);
   assert.deepEqual(await readdir(dir), ["pi-oaistt.json"]);
 });

@@ -1,359 +1,172 @@
-# Engineering evidence
+# Development and verification
 
-## Baseline and development setup
+## Interface policy during v0.*
 
-Primary implementation/test baseline: Pi 0.99.2. Tests run on Node 26.10.0;
-Node 22.19+ is the declared baseline (its TypeScript stripping runs `.ts` tests).
-Use `npm ci --ignore-scripts`, `npm run check`, and `npm test`. Dependency scripts
-are not needed for this synthetic gate. No microphone or provider is contacted.
-The lockfile pins development dependencies; production imports use Pi's public
-root exports. Pi supplies peer modules to loaded extensions.
+During pre-v1 development, backward compatibility and interface stability are
+not design goals. Prefer clean, correct and useful interfaces and documentation;
+do not retain aliases, shims or automatic configuration conversion for earlier
+interfaces. Unknown fields and unsupported syntax are rejected.
 
-The approved implementation handoff supplied by the owner remains the product
-contract. The v0.2 target is not a claim of live acceptance or release readiness. No external reference implementation has been copied into this code.
+Product documentation describes the current state only. It contains no interface
+history or migration guides. A user can ask an agent to fix a configuration using
+the current reference; this does not authorize unsolicited private-file changes.
+Reconsider this policy at v1.* at the latest, or earlier if explicitly decided.
+Privacy, cancellation and editor-ownership guarantees remain requirements.
 
-## v0.2.0 work in progress
+## Development setup
 
-Owner authorized implementation after the umbrella plan readback. Local annotated
-`v0.1.0` points to `8ddb5a9`; no push/release. Target contract is Pathfinder
-`59c3521`. Private v0.1 settings are deliberately not migrated automatically.
+The implementation and native API tests target **Pi 0.99.2**. Node **22.19.0 or
+newer** is required; Node's TypeScript stripping runs the `.ts` tests directly.
+From a checkout:
 
-### Current v0.2 evidence (automated, not live acceptance)
+```sh
+npm ci --ignore-scripts
+npm run check
+npm test
+```
 
-Public safety gate committed as `403b838` before broad implementation. The revised
-schema, shared dictation/manual controller, correction/STT chains, profile service,
-commands/tools/keys and marker are now implemented. **291/291 synthetic tests and
-TypeScript check pass** on Pi 0.99.2 / Node 26.10.0. No microphone, real credentials
-or external provider were used. Existing recorder fixtures spawn only synthetic
-Node children; native compatible payload fixtures explicitly disable HTTP.
+The lockfile pins development dependencies. Dependency lifecycle scripts are not
+needed for the synthetic suite. Production imports use Pi's public root exports;
+Pi supplies runtime peer modules to loaded extensions. No microphone, personal
+configuration or real provider credentials are required for tests.
 
-| Area | Evidence |
+[GitHub Actions CI](.github/workflows/ci.yml) runs locked installs, typechecking
+and tests on Ubuntu with Node 22.19.0 and 24. It isolates Pi settings in temporary
+storage, uses read-only permissions and SHA-pinned actions, and does not retain
+checkout credentials. CI is not live hardware/provider acceptance.
+
+## Safety architecture
+
+### Editor ownership and prompt capture
+
+A public `CustomEditor` subclass observes actual prompt capture through Pi's
+submit and follow-up callbacks. It invalidates the delivery lease synchronously
+before delegating capture, including busy-agent and compaction paths. It does not
+intercept every Enter key or submit a prompt itself.
+
+The adapter uses semantic expanded text for editor transfer and delivery. Append
+preserves intervening typing, multiline paste and attachment/path references;
+manual correction replaces only the captured draft while its revision remains
+owned. Native setters provide undo. Identical manual output makes no undo entry.
+Cursor/focus changes alone do not invalidate manual correction; content changes,
+including edit-and-revert, do.
+
+Editor replacement is not seamless undo-history transfer. The adapter refuses to
+replace another custom editor, and refuses delivery after an editor takeover.
+Full reload restores semantic text but may change editor instance/history.
+
+### Owned operations and cleanup
+
+One shared controller owns either dictation or manual correction. Each operation
+captures immutable settings and model identity, owns its abort controller and
+never uses the main-agent signal. Submit, navigation, editor replacement and full
+reload discard unfinished work. Settings-only reload affects subsequent work.
+Cancellation never submits, aborts the main agent, restores a stale draft or
+inserts a raw fallback.
+
+Recorder ownership remains held until cleanup succeeds. Startup is distinct from
+REC readiness; stop/cleanup failures cannot silently permit a second recorder.
+Completion checks revalidate ownership and monotonic deadlines before another
+provider request or editor write, even when a provider ignores abort.
+
+### Recorder and provider boundaries
+
+The Linux recorder uses `parecord` with PulseAudio/PipeWire-Pulse. Resolve the
+server recording default at capture start, or use the explicit source override;
+`PULSE_SOURCE` is not an override. Reject muted, missing and monitor sources.
+No host defaults, volume or routing are changed.
+
+Audio uses private temporary storage, mono PCM16 at 16 kHz, bounded duration/size,
+and validated WAV finalization. REC means audio bytes arrived, not merely that a
+child started. Graceful SIGINT timeout escalates only the owned detached process
+group; forced-stop or invalid audio is never uploaded. Exact digital silence is
+rejected without treating quiet speech as silence.
+
+STT profiles explicitly define endpoint/model/auth. Ordered fallback is opt-in,
+following-only and no-wrap, using fresh multipart bodies over the same validated
+WAV. Successful profile preference is process-local; newer user choices or reloads
+win over held success. Only explicit saves write preferences to configuration.
+
+Correction uses only explicitly ordered Pi model identities, including an explicit
+`$current` selector frozen at operation start. Resolve duplicates at first position
+and restart the order for every operation. The automatic switch never authorizes
+a model, and F7 uses the same order independently. Pi owns routing/credentials;
+correction does not inherit main-agent thinking settings or start an agent turn.
+
+One bounded committed active-branch snapshot supplies eligible user/assistant text
+and summaries, excluding direct tools, images, thinking, shell and custom messages.
+History can be disabled. Dictation targets only the transcript; F7 targets the
+captured unsent draft, not attachment file contents. Requests have no tools, use
+isolated target/context data, and reuse the snapshot across attempts. JSON isolation
+is not proof of semantic resistance to adversarial text.
+
+Ordinary correction exhaustion gives guarded raw dictation plus a notice or leaves
+manual drafts unchanged. Invalid thinking policy stops locally with a red error;
+unused later tuning cannot reject an earlier success. Cancellation gives no result.
+
+### Configuration and UI
+
+Only the current fields, commands and exact aliases are accepted. Invalid routing
+cannot silently inherit an endpoint or authorize a fallback. Binding faults are
+localized; Pi's cross-extension registration priority is not universal conflict
+detection. Key changes require full reload.
+
+Source/profile saves serialize read/validate/modify/private atomic replacement
+through Pi's public file mutation queue, preserving unrelated fields. Defaults,
+listing and temporary choices do not write configuration.
+
+Feedback uses public status/widget APIs without replacing the footer. Each help,
+status or settings-reload response is one composed notification so consecutive
+informational notices cannot hide command help or pending bindings. Profile tools
+expose bounded selection metadata, not audio, drafts, endpoints or credentials;
+non-TUI metadata does not enable recording or editor access.
+
+## Automated evidence
+
+**327 synthetic tests and typechecking pass** against Pi 0.99.2. Clean temporary
+installs pass on Node 22.19.0/npm 10.9.9 and Node 24.21.0/npm 11.21.0; the suite also
+passes in the Node 26.10.0 development environment.
+
+| Area | Coverage |
 | --- | --- |
-| Ownership/editor | Native regular/fullscreen, idle/streaming/compaction F7 and F8, capture, semantic setter/paste/undo, edit-and-revert/submit-retype, empty/identical output, F12/Escape/focus, late uncooperative completion, retained teardown |
-| Correction | Start-frozen current identity, alias/literal dedupe and restart, named/null defaults, local thinking fault before request, unused later tuning, manual whitespace/no-write failures, normal provider failure/exhaustion/deadline/cancel, one projected history snapshot |
-| STT | Consent off/on, following-only/no-wrap/inactive eligibility, fixed failure categories, fresh multipart bodies over identical prepared WAV, explicit per-profile auth, shared-audio errors do not advance, held success versus choice/reselection/reload/cancel, sticky preference survives conversations/later correction cancel |
-| Config/persistence | Strict legacy/unknown/malformed/inactive definitions, finite fractional deadlines, deep snapshots, localized keys/thinking, queued whole source/profile transactions preserving order/fields/mode, held save versus newer temporary choice, failed settings reload preserving active work |
-| UI/keys/tools | Native F7/F8/F12, replacement/disable/multi aliases/native conflicts, pending settings-only keys, exact commands/no bare start/no source dialog, bounded profile-only tools including lazy non-TUI metadata, safe warning categories/labels, narrow/footer/theme regressions |
-| Reload/package | Real discovery/jiti/runner, native reset-before-shutdown, fresh-runtime key change/disable through native dispatcher, semantic paste preservation, public-only production imports |
+| Editor/ownership | Native regular/fullscreen, idle/busy/compaction capture, semantic paste/references/undo, eager manual edit cancellation, cursor/focus, no-op output, late completion and retained cleanup |
+| Correction | Automatic/manual with empty/configured/unavailable order, frozen current identity and deduplication, tuning/null/thinking errors, auth-ready empty-order non-dispatch, deadlines, context exclusions and immutable requests |
+| STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
+| Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
+| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, help/status rendering, bounded metadata, narrow/theme/footer layouts, pending keys and exact aliases |
+| Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
+| Documentation | Runnable JSON examples, exact default settings and explicit example order |
 
-### Reload transfer finding and fix
+Recorder fixtures spawn detached Node children emitting synthetic PCM, not actual
+recorders. HTTP tests use controlled synthetic responses or loopback servers;
+faux providers disable external HTTP. No real audio, transcripts, credentials or
+private user configuration are fixtures or logs.
 
-A stronger reload fixture exposed an important order: Pi's `resetExtensionUI()`
-restores the default editor **before** emitting shutdown. That transfer uses
-`getText()`, not expanded semantics. Initial hydration/dispose alone cannot save a
-paste created later in our adapter when native reset executes first.
+The native UI fixture has test-only access to private host wiring to isolate
+callbacks, while production stays public-only. It resolves TUI/keybindings from
+Pi's own module tree to avoid split global registries. Agent/auth and unrelated
+panels are synthetic: these tests are not a complete live Pi session or reload.
 
-The public subclass now returns semantic expanded text from `getText()` while
-native rendering still uses its lines. Its public change observer forwards native
-visible text to the assigned downstream callback, preserving callback behavior.
-Native reset/fresh-runtime dispatch tests preserve synthetic large paste/reference
-text and disable old bindings. No private production patch/raw-key interception.
-Editor replacement still changes instance/history; this is not cross-reload undo
-preservation or compatibility proof for arbitrary editors/other Pi versions.
+## Live acceptance
 
-Clean project-local `npm ci --ignore-scripts`, typecheck and the complete suite pass.
-Dry-run package review contains only source, synthetic tests, metadata and docs:
-no private configuration, recordings or bundled Pi runtime. Asynchronous completion
-checks also revalidate editor ownership before either chain's next request, not
-merely on the UI timer or final delivery. Monotonic expiry rejects CPU-starved late
-success and includes WAV preparation/context work in chain budgets.
+The owner confirms help works as expected on their setup. Exact layout, aliases
+and root/status coverage were not reported, so this is not universal UI acceptance.
+A GitHub-hosted CI run was reported started; its outcome has not been verified in
+this development record.
 
-### Follow-up: visible help/status output
+Remaining acceptance includes microphone first/last words and timing, actual
+STT/auth routes, correction quality and thinking controls, physical terminal/tmux
+shortcuts, busy/compaction/navigation/reload, clipboard/image references, and
+stock/replacement/compositor layouts. Test normal Linux and containerized (or
+“boxed”) setups, where Pi runs inside a container; see
+[piinabox](https://github.com/7h145/piinabox). Container audio requires explicit
+host approval and is separate from provider networking.
 
-Owner reported missing command help. Source inspection and red native-rendering
-regressions found that Pi 0.99.2's `showStatus()` replaces consecutive informational
-notices: the separate status/pending-key calls hid the previously emitted help.
-An accumulating notification spy alone did not reproduce visible behavior.
+Use the [live checklist](docs/validation.md). Record coarse pass/fail, versions,
+phase and timing only; do not retain audio, transcripts, credentials or private
+configuration. Source inspection, synthetic tests and live observations remain
+separate evidence categories. Passing one route does not fill the entire matrix.
 
-Each help/status response now emits one composed public notification. Bare root
-keeps concise help/status; `help`/`h` lists commands/exact aliases, default/active
-controls and pending mappings; `status`/`s` reports state without the command list.
-Settings reload also composes its confirmation and state. `--help` and invalid
-arguments remain unchanged; no spec edit or alias addition.
-
-Six new regressions exercise native notification/coalescing/rendering in regular/
-fullscreen layouts and widths 40/80/120, disabled/rebound/pending controls, aliases,
-state-only output and active dictation/manual ownership. No draft/config leakage,
-editor write, model/recorder request, main-agent action or session entry. Typecheck
-and all 291 synthetic tests pass. Live user confirmation after reload is pending.
-
-### Acceptance still pending
-
-Owner/tester-assisted v0.2 mic first/last words and sample timing; normal Linux;
-actual local/remote STT/auth compatibility; selected correction/thinking quality;
-physical F7/F8/F12/terminal/tmux and complete busy/compaction/compositor/clipboard
-matrix. See `docs/validation.md`. Native reset/discovery tests fake unrelated UI
-panels, agent/auth and shutdown infrastructure: not a complete live Pi reload.
-Historical v0.1 owner-confirmed audio evidence below remains historical.
-
-Private v0.1 configuration remains untouched. The new format must be explicitly
-migrated before owner reload/dogfooding. No push, publication, v0.2 tag or release
-acceptance is implied. Broader parity, TTS, glossary and `/lazy` remain excluded.
-
-## Historical v0.1 engineering evidence
-
-The sections below retain the original implementation and live observations; use
-current README/configuration documentation for v0.2 behavior/defaults/commands.
-
-## First feasibility gate: editor capture and delivery
-
-Source inspected: Pi 0.99.2 public declarations/examples and installed
-`InteractiveMode`, `CustomEditor`, and TUI `Editor` implementations. Product code
-only uses public APIs. No footer replacement, terminal-wide Enter interception,
-private UI monkey patch or main-agent prompt API is used.
-
-### Mechanism
-
-- Install a small `CustomEditor` subclass through `setEditorComponent`. Preserve
-  native editing, app handlers, extension shortcuts and main-agent Escape.
-- Wrap public `onSubmit` and `app.message.followUp` callbacks after Pi wires them,
-  before delegating editor input. Observe actual capture, not every Enter key.
-- Native idle follow-up calls `onSubmit` synchronously; busy/compaction follow-up
-  has its own capture path. `ctx.isIdle()` only classifies that native path; it
-  never restricts dictation start/stop or delivery.
-- Invalidate a delivery lease synchronously before native submit work can await
-  authentication, provider calls or processing. Native Enter clears/captures the
-  editor just before `onSubmit`, in the same synchronous stack; there is no event
-  loop yield in between. A later `input` event alone would miss UI compaction
-  queues and is not the primary guard.
-- Exclude actual extension controls, exact built-in UI controls and nonempty bash
-  commands from ordinary submission classification. Prompt templates, skills,
-  unknown slash text, malformed controls and busy follow-up prompt text remain
-  submissions. The built-in-control classification is a small version-tested
-  table because Pi does not export a public classification API.
-- Append synchronously using `getEditorText()`/`setEditorText()` with a final
-  ownership check. Preserve all existing draft text/whitespace. Add one space
-  only if the nonempty draft does not end in whitespace; trim only the incoming
-  transcript's outer whitespace. Do not insert at the cursor or submit.
-
-### Paste, attachment and undo evidence
-
-Pi's getter expands collapsed paste markers, and its setter snapshots the paste
-map for undo before clearing display state. Append expands visual paste collapsing
-but preserves semantic content; one native undo restores the pre-append draft,
-including its paste map. Native clipboard images are inserted by Pi as temporary
-file paths, not a separate editor attachment object (`handleClipboardPaste`).
-Tests preserve these paths and `@` references verbatim along with multiline paste
-content; live clipboard/image-provider behavior is not yet validated.
-
-Pi's editor-factory installation copies **unexpanded** `getText()`. The subclass
-hydrates that first transfer from the expanded public getter, otherwise it would
-inherit opaque markers with no paste map. Restoration similarly expands text
-before reverting to stock. Installation changes editor instance/history; append
-itself is undoable. The adapter refuses to replace an already-installed custom
-editor, and refuses delivery if another extension takes over afterward. Arbitrary
-custom-editor composition is not claimed.
-
-### Automated results
-
-At this milestone, `npm run check` and **36 tests** passed. Tests use real Pi 0.99.2 editor/UI callback
-implementations and real regular/fullscreen TUI focus/input routing on a synthetic
-terminal. The test-only host fixture accesses private InteractiveMode wiring to
-isolate native callbacks; it fakes the agent/network/auth and unrelated UI panels,
-not submit, follow-up, compaction queuing or editor APIs. It does not start a full
-Pi agent session. Production code has no private imports/access.
-
-Covered: idle/busy/compaction Enter and Alt+Enter; invalidation before native
-routing and delayed completions; delivery-before-submit; one append per lease;
-control commands; typing; F8 forwarding; main-agent Escape forwarding;
-dialog/autocomplete focus; reconfigured keys; multiline large pastes, whitespace,
-file/image path references and undo; install/restore; lost-editor ownership;
-invalid/stale/empty deliveries.
-
-Test-harness pitfall found and resolved: Pi's npm shrinkwrap can install a nested
-TUI copy even when the product has a same-version TUI development peer. Importing
-that other copy made native Editor use different global keybindings. The fixture
-resolves the TUI **from Pi's own module root**, as Pi maps extension imports. The
-fixture also uses native host keybindings. Never interpret a split-registry test
-as proof of actual Pi behavior.
-
-## Configuration and owned-operation controller
-
-The tested schema/defaults/credential references and source-save behavior are in
-[configuration.md](docs/configuration.md). Missing correction candidates remain
-an empty list; invalid settings never silently reroute. Temporary source overrides
-stay in memory; explicit source saves preserve other live config fields and use
-private atomic writes. No config is created merely by loading defaults.
-
-The controller allocates one operation synchronously and starts lifetime work in
-a separate task. It owns an abort controller and delivery lease, freezes settings,
-and retains recorder ownership until disposal succeeds. `starting` is a separate
-phase before recorder readiness, so later adapters need not falsely show REC while
-probing/connecting. A toggle in starting/recording requests stop; during processing
-it reports phase without starting another operation. Cancellation invalidates
-immediately, emits one fixed notice, and never waits for/aborts the main agent.
-
-Bounded stages settle even when a provider ignores abort. Correction error/empty
-result/total timeout yields raw text plus one notice; user cancellation yields no
-raw or corrected text. Disabled correction makes no correction request. Stale
-callbacks cannot affect a later operation. Phase status is cleared before teardown;
-failed disposal retains ownership and blocks another recorder rather than hiding
-an orphan. Adapter disposal itself must be idempotent and bounded.
-
-Total suite: **102 passing tests** plus typecheck. Controller tests use deterministic
-recorder/provider fakes, held cleanup and mock deadlines; they exercise cancellation,
-submission and session-discard reasons in starting, recording, stopping,
-transcribing and correcting. At this milestone, production Pi lifecycle wiring and presentation were
-still pending; fake pipeline success is not a live microphone/provider claim.
-
-## Recorder and compatible transcription adapter
-
-Implemented one deliberate Linux backend: parecord/Pulse (including PipeWire-Pulse).
-Resolve the default source per capture, or apply only the explicit config/env source
-as an argv option; preflight missing/muted/monitor sources without changing host
-routing. Own the startup handle before readiness, require first private-file audio
-bytes before REC, and use private mode-0700/0600 storage. Cap recording duration/size;
-SIGINT finalization must exit and validate before upload. Graceful-stop timeout
-escalates TERM/KILL, reaps only the owned detached group and refuses upload even if
-the forced-stop artifact parses. Disposal is idempotent and includes unfinished
-startup. Exact digital silence fails separately from structural WAV validity;
-quiet nonzero PCM is accepted. Final PCM duration is checked against the capture
-plus graceful-stop budget, including a second check before upload.
-
-Transcription uses bounded multipart WAV/model/language/JSON requests, explicit
-optional bearer auth, no automatic redirects, a constant upload filename and bounded
-UTF-8 JSON response decoding. Errors never echo provider bodies. Both operation and
-HTTP layers enforce owned cancellation/deadlines, even with uncooperative fetch.
-
-Total suite: **131 passing tests** plus typecheck. Added real detached Node child
-fixtures emitting ONLY synthetic PCM to test graceful finalization, invalid/silent
-WAV, oversized files, spawn/stop failure, kill/reap, routing and cancellation. A
-real loopback HTTP server verifies multipart fields/auth/PCM and nonempty JSON;
-negative response/cancellation tests are synthetic. No hardware/provider tests run
-as part of the automated suite.
-
-### Owner-authorized live playback-monitor experiment
-
-The owner offered running playback as a simulated microphone and a loopback Whisper
-server. Consumed the existing host-provided Pulse route and installed container-only
-`pulseaudio-utils`; no host defaults, mute, volume or exposure were changed. Manual
-capture targeted the default **sink's playback monitor**, NOT a microphone. Private
-audio was removed after each request; no transcript/audio/provider body was logged
-or added to fixtures/commits. Only timing/format/nonempty-response metadata remains.
-
-- Default parecord buffering: 6.006 s wall capture, first file audio at 2072 ms,
-  3 ms finalization, PCM16 mono 16 kHz WAV 4.000 s / 64000 frames. Compatible local
-  JSON `text` returned in 291 ms.
-- Per-stream `--latency-msec=100 --process-time-msec=20`: 6.024 s wall capture,
-  first file audio at 153 ms, 3 ms finalization, WAV 5.900 s / 94400 frames. Compatible
-  nonempty local JSON `text` returned in 319 ms. These flags now ship in the adapter.
-
-This exposes and substantially reduces a real trailing-buffer discrepancy; it does
-NOT establish microphone correctness, intelligibility, no clipped last phoneme,
-Bluetooth latency, exact wall/PCM equality or complete extension UX. Production
-still refuses playback monitors as mic sources. Actual microphone/terminal/provider
-matrix and speech-tail review remain release checks.
-
-## Isolated correction and public Pi integration
-
-Implemented `src/correction.ts`: consume `buildSessionProjection()` rather than
-raw history or a flattened prompt. Preserve eligible committed active-branch text
-and projected compaction/branch summaries, respecting context-edit omissions.
-Exclude by source-entry provenance as well as projected role: custom messages and
-metadata can otherwise look like user messages. Zero context budget never reads
-history. Newest eligible text is budgeted in Unicode code points, including labels;
-all candidates receive the same initial context/transcript snapshot.
-
-Correction streams through the public Pi model registry with explicit ordered
-models, no tools and an isolated system prompt/JSON data message. Fresh request
-objects prevent a provider mutating a later attempt. Candidate errors/missing
-auth/empty or invalid output/attempt timeout advance; exhaustion/total timeout uses
-raw text. Cancellation delivers neither. No selected model, main signal, main
-prompt, agent turn, prompt queue or result persistence is used.
-
-`index.ts` and `pi.extensions` expose the extension directory. The factory has no
-config I/O, timers, processes or provider requests. TUI session start installs the
-editor boundary and loads settings; RPC/print/JSON never record or read config.
-F8/`/oaistt`, cancel/help/status/settings reload, temporary source input and explicit
-save are wired. Credentials validate before capture. One operation captures its
-pipeline/session/registry references; later setting changes cannot reroute it.
-Pre-navigation events synchronously cancel even if navigation is later vetoed.
-Shutdown/reload cancels owned work, clears feedback and restores the stock editor.
-An editor takeover is never overwritten or allowed to receive an obsolete result.
-
-Feedback uses only public `setStatus`/`setWidget`: stable status key
-`footer-compositor:right:80:pi-oaistt` (optional pi-assorted compositor convention),
-red `● REC mm:ss`, muted phases, one above-editor widget and a cleared owned timer.
-No footer takeover or private presentation patch. Muted notices report fixed
-categories/coarse policy, never source/endpoint/credential/transcript values.
-Actual footer/compositor rendering remains unvalidated.
-
-After a clean `npm ci --ignore-scripts`, **175 tests and typecheck pass** on Node
-26.10.0/Pi 0.99.2. New evidence includes:
-
-- Real public discovery/jiti/ExtensionRunner of a synthetic project's symlinked
-  package directory; command/shortcut registration, ready/help/status, TUI startup
-  and shutdown/restoration. Config/auth are temporary/synthetic; no provider/audio
-  request occurs. This is loader evidence, not a full live user session.
-- Real native F8 dispatcher and regular/fullscreen TUI input through the adapter,
-  idle/streaming/compaction; stop/latest-draft delivery without a main-agent action.
-- Integrated submit/follow-up synchronous cancellation; Escape forwarding vs
-  dedicated cancel; navigation/reload/late correction; retained cleanup ownership;
-  timer/widget clearing and editor takeover. Backend work is synthetic here.
-- Real SessionManager projection with summaries/context edits/branch selection;
-  source exclusions and Unicode budgets; malicious data isolation and fresh-request
-  failover; abort/attempt/total budgets; native public ModelRuntime/provider-registry
-  streaming with faux auth, including missing-auth skip. No external LLM is called.
-- Regression: a prompt submitted after successful delivery while cleanup remains
-  held does not emit a false unfinished-result-discard notice.
-
-`npm ci` still reports one high-severity transitive audit issue (brace-expansion in
-the Pi development tree). No blind dependency upgrade/audit fix was applied;
-review before release. The package is **0.1.0**, remains private, and has no release
-tag. Pre-v1 compatibility is not promised; v1.0.0 is reserved for the first real
-product, not an implementation-scope label.
-
-## First owner-confirmed live dictation
-
-After explicit local-server configuration and container client provisioning, the
-owner confirmed the first live dictation worked as expected. Confirmation covered
-text remaining in the editor until manual submission and intact first/last spoken
-words. Correction was disabled for this check. No dictated text or audio is retained
-in these engineering notes or fixtures.
-
-This establishes one initial live transcription/draft-delivery success in the
-owner's current environment, not the broader hardware/provider/interaction matrix.
-
-## Source-dialog and feedback regression checks
-
-**196 tests and typecheck pass** after extending the test-only native fixture with
-real Pi source dialogs, widget containers and stock footer rendering. Agent/session
-stats and footer data remain synthetic; no Git watcher, audio or provider is used.
-Production still imports only public APIs.
-
-New checks exercise temporary source choices, explicit source-only persistence,
-default restoration and immutable active routing with a real temporary ConfigStore.
-Native dialog Enter is not prompt submission; dialog Escape restores typing focus
-without aborting the agent or dictation. Delivery behind an open source dialog
-preserves its focus and appends only to the main draft. Shutdown closes the dialog;
-the real public ExtensionRunner can invalidate before its old command settles
-without permitting a stale choice/write/notice.
-
-Native regular/fullscreen stock and replacement-footers are rendered at 12/20/80
-columns. Every measured line fits, REC remains in the above-editor widget, the
-replacement footer is untouched and cancellation clears owned feedback. This is
-synthetic renderer evidence, not the full live/compositor layout matrix.
-
-Three new failing regression tests led to fixes: reject duplicate source `--save`
-flags before any mutation, re-evaluate phase colors after theme changes during
-processing, and suppress false editor-loss discard notices after result work has
-already finished but recorder cleanup remains held. The existing one-second
-ownership timer refreshes only changed text, avoiding repeated widget replacement
-when the phase/theme is unchanged. See the [live checklist](docs/validation.md)
-for owner-driven checks without retaining private test content.
-
-## Remaining unvalidated acceptance
-
-- Broader live reload, command/status/source-save/dialog interaction, microphone
-  and speech-tail checks; physical terminal/tmux F8 variants and collisions. The
-  first basic dictation/draft/manual-submit check passed as reported above.
-- Live busy-agent/compaction/navigation/auth/reload behavior and semantic
-  clipboard/image-provider preservation in a full interactive Pi session.
-- Stock/narrow/replacement footer and optional compositor visibility/layout.
-- Normal/boxed audio, local/remote STT/auth and ordered correction-provider matrix;
-  correction quality, domain vocabulary, context disambiguation and data-injection
-  resilience. JSON isolation is not proof of semantic resistance.
-- Node 22.19 live validation and later Pi compatibility. API declaration coverage
-  and a Node 26 fixture run are not evidence for every supported environment.
-
-No real audio, transcript, credentials or user configuration are test fixtures.
+TTS, direct streaming transcription, tool-derived glossaries and general custom
+editor composition are outside the implemented scope. Review pinned dependency
+security before release rather than applying untested blanket upgrades.

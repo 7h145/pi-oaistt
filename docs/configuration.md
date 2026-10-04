@@ -1,10 +1,10 @@
 # Configuration reference
 
-v0.2.0 uses a **breaking order/maps schema**. Settings live in `pi-oaistt.json`
-under public Pi `getAgentDir()`, with no project layer. Files must be regular,
-non-symlink, at most 64 KiB. Reading defaults never writes a file.
+Settings live in `pi-oaistt.json` under Pi's agent directory (`getAgentDir()`),
+with no project layer. Files must be regular, non-symlink, at most 64 KiB.
+Reading defaults never writes a file.
 
-Unknown/obsolete fields, invalid identities/order references and invalid tuning
+Unknown fields, invalid identities/order references and invalid tuning
 fail closed. No malformed present transcription section inherits a shipped route.
 Thinking faults remain isolated correction errors; malformed/conflicting keys
 localize to those bindings. Other valid controls remain available.
@@ -101,7 +101,7 @@ Without a transcription section, the explicit `openai` definition is:
 `auth: {"type":"env","name":"OPENAI_API_KEY"}`. An explicitly present section
 must supply its own `order` and `profiles`, even if only changing tuning.
 
-## Recorder and boxed setup
+## Recorder and container audio
 
 Provide `parecord`/`pactl` and an existing Pulse/PipeWire-Pulse connection. On Debian
 family images, explicitly provision client tools with `pulseaudio-utils`; no host
@@ -120,8 +120,10 @@ completeness guarantees. Duration cap requests graceful stop if ready; premature
 size overflow or failed/forced finalization discards. Graceful SIGINT timeout escalates
 only the owned detached group through TERM (500 ms) and KILL/reap (1000 ms).
 
-A boxed host must explicitly approve audio access and handle server authorization,
-UID/cookie/path permissions. An illustrative host-approved bind uses your runtime's
+In a containerized (or “boxed”) setup, Pi runs inside a container; see
+[piinabox](https://github.com/7h145/piinabox). The host must explicitly approve
+audio access and handle server authorization and UID/cookie/path permissions.
+An illustrative host-approved bind uses your runtime's
 bind-mount option for `APPROVED_PULSE_SOCKET` at `/run/host-pulse/native` and
 `PULSE_SERVER=unix:/run/host-pulse/native`; provision client tools in the image.
 This is not an exercised universal Docker/Podman/rootless recipe. Do not expose
@@ -239,7 +241,8 @@ are supported:
 
 No-name source reports current selection/usage, never a dialog or mutation.
 `recorder source default [--save]` follows server default, persisting null.
-There is no save-current-without-name, flat legacy source verb or typed correction.
+Only the commands and aliases listed above are accepted. Saving a selection
+requires a name; draft correction is invoked with F7, not a typed command.
 Commands never submit a main-agent turn; output is UI-only.
 
 Saves serialize the entire read/validate/modify/private atomic-rename transaction
@@ -269,42 +272,3 @@ and reports pending mappings but keeps active native handlers. Commands recover
 configuration/dictation/cancellation independently; F7's buffer path has no naive
 typed-command equivalent. Full reload also reloads current native keybindings before
 checking conflicts; no raw-key takeover is installed.
-
-## Migrate from v0.1.0
-
-Back up and review your private file yourself, or explicitly ask an agent to migrate
-it. Implementation/upgrading is not permission to edit private settings automatically.
-
-1. Move old singleton transcription endpoint/model into a named profile and reference
-   it in `transcription.order`. Convert `apiKeyEnv` to explicit env auth, or old null to
-   `{"type":"none"}`. Do not copy placeholder endpoints blindly.
-2. Move `language` and old `timeoutSeconds` to section defaults/profile tuning using
-   `attemptTimeoutSeconds`; set a separate whole-chain timeout if desired.
-3. Rename `correction.enabled` to `correction.automatic`, preserving its boolean
-   value. The old name is rejected, not aliased—even if both names are present.
-   Move correction `models` to `order`. Move `attemptTimeoutSeconds` to `defaults`;
-   put named overrides in `modelSettings`. Only add `$current` with intentional consent.
-4. Review recorder intent: default/null now follows the server, **not PULSE_SOURCE**.
-   Put an intentional device override in `recorder.source` if needed.
-5. Keep automatic fallback/marker off unless deliberately opting in. Review default
-   F7/F12 and any conflicts. Full `/reload` loads v0.2 code/keys; inspect help/status.
-
-Earlier v0.2 development configurations also used `correction.enabled`. If your
-file already uses order/maps, rename just that key, keeping its `true`/`false`
-value and all other settings. For example, the legacy
-`"correction": {"enabled": false, "order": ["YOUR_PROVIDER/YOUR_MODEL"]}` becomes:
-
-```json
-{
-  "correction": {
-    "automatic": false,
-    "order": ["YOUR_PROVIDER/YOUR_MODEL"]
-  }
-}
-```
-
-No automatic rewrite or legacy-format fallback occurs. The recommendation does
-not change your order; adopt it only if you deliberately choose that destination.
-
-Legacy fields are errors, not compatibility fallbacks. TTS, broader pi-lazy parity,
-glossary enrichment, direct streams and `/lazy` compatibility remain out of scope.

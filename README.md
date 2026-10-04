@@ -58,8 +58,12 @@ live hardware/provider matrix is still being validated. See the
 
 Dictation and draft correction require the terminal editor, not RPC,
 print, or JSON mode. pi-oaistt does not compose with another custom
-editor. Container audio needs explicitly approved host access; see
-[Context and privacy](#context-and-privacy) before sharing an audio socket.
+editor.
+
+In a containerized (or “boxed”) setup, Pi runs inside a container; see
+[piinabox](https://github.com/7h145/piinabox). Audio access needs explicit
+host approval. Read [Context and privacy](#context-and-privacy) before
+sharing an audio socket.
 
 ## Installation
 
@@ -82,11 +86,6 @@ Do not load both the installed and checkout copies. Disable the installed
 copy with `pi config`, or use `pi --no-extensions -e ./index.ts` for an
 isolated run. Pi supplies the runtime modules; no build step is needed.
 Loading the extension does not open the microphone or contact a provider.
-
-**Upgrading from v0.1.0?** Migrate your settings before use. Version 0.2
-replaces the old transcription and correction schema; old fields are
-rejected, not automatically rewritten. See the
-[migration guide](docs/configuration.md#migrate-from-v010).
 
 ## Usage
 
@@ -152,8 +151,8 @@ if you later undo the change. Moving the cursor or changing focus alone
 does not cancel it. Failure leaves the draft untouched; nothing is
 submitted or restored over a newer draft.
 
-F7 works independently of automatic dictation correction. There is no
-`/lazy` wrapper or typed draft-correction command.
+F7 works independently of automatic dictation correction. Draft correction
+is invoked with F7, not a typed command.
 
 ## Correction
 
@@ -373,7 +372,7 @@ an override. Inspect sources or select one for future recordings with:
 Add `--save` to persist an explicit selection. These commands do not
 change the host's default input, mute, or volume. Default/null follows
 the server's recording default, not `PULSE_SOURCE`. See
-[recorder setup](docs/configuration.md#recorder-and-boxed-setup) for bounds
+[recorder setup](docs/configuration.md#recorder-and-container-audio) for bounds
 and container requirements.
 
 To change shortcuts, add a `keybindings` section, for example:
@@ -438,7 +437,8 @@ confirms loading, not microphone capture, credentials, or provider health.
   shortcut warnings. Rebind keys if needed. Native conflicts are disabled;
   conflicts with other extensions follow Pi's priority rules.
 - **Settings do not apply:** use `/oaistt reload` for pipeline settings,
-  full `/reload` for code/keys, and review the v0.1 migration if relevant.
+  full `/reload` for code/keys, and check settings against the
+  [configuration reference](docs/configuration.md).
 - **Another editor is installed:** restore the stock editor and reload.
   Paste display may expand on editor transfer; editor replacement can
   change undo history.

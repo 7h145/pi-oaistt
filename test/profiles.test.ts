@@ -44,7 +44,7 @@ for (const value of [
   { transcription: { ...raw().transcription, defaults: { attemptTimeoutSeconds: null } } }, { transcription: { ...raw().transcription, defaults: { endpoint: "http://127.0.0.1:1/stt" } } },
   { transcription: { ...raw().transcription, profiles: { ...raw().transcription.profiles, standby: { endpoint: "http://127.0.0.1:1/stt", model: "fixture" } } } },
   { correction: { modelSettings: { $current: { thinkingLevel: null } } } }, { delivery: { dictationMarker: null } },
-]) test("malformed/legacy/inactive configuration cannot silently supply a route", () => assert.throws(() => parseConfig(value), ConfigError));
+]) test("malformed/unknown/inactive configuration cannot silently supply a route", () => assert.throws(() => parseConfig(value), ConfigError));
 
 test("thinking parse faults and invalid keys localize, never silently null/default", () => {
   const c = parseConfig({ correction: { defaults: { thinkingLevel: 123 } }, keybindings: { "editor.correct": false, unknown: "f6" } });
