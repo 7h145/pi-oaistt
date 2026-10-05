@@ -47,6 +47,8 @@ interface Scope {
   ctx: ExtensionContext; id: string; boundary?: EditorBoundary; feedback?: Feedback; abort: AbortController;
 }
 
+type ProcessingPhase = "transcribing" | "correcting";
+
 /** One owner-scoped feedback widget above the editor. */
 class Feedback {
   #ctx: ExtensionContext;
@@ -54,14 +56,15 @@ class Feedback {
   #current: () => boolean;
   #checkEditor: () => boolean;
   #recordingText: (elapsed: string) => string;
+  #processingText: (phase: ProcessingPhase) => string;
   #phase: Phase = "idle";
   #since = 0;
   #lastText?: string;
   #timer?: ReturnType<typeof setInterval>;
   constructor(ctx: ExtensionContext, clock: () => number, current: () => boolean, checkEditor: () => boolean,
-    recordingText: (elapsed: string) => string) {
+    recordingText: (elapsed: string) => string, processingText: (phase: ProcessingPhase) => string) {
     this.#ctx = ctx; this.#clock = clock; this.#current = current; this.#checkEditor = checkEditor;
-    this.#recordingText = recordingText;
+    this.#recordingText = recordingText; this.#processingText = processingText;
   }
   phase(phase: Phase): void {
     clearInterval(this.#timer); this.#timer = undefined;
@@ -82,9 +85,10 @@ class Feedback {
       const seconds = Math.max(0, Math.floor((this.#clock() - this.#since) / 1000));
       const elapsed = `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
       text = this.#recordingText(elapsed);
+    } else if (this.#phase === "transcribing" || this.#phase === "correcting") {
+      text = this.#processingText(this.#phase);
     } else {
-      const label = { starting: "Starting recorder…", stopping: "Stopping…", transcribing: "Transcribing…",
-        correcting: "Correcting…", cleaning: "Cleaning up…", idle: "" }[this.#phase];
+      const label = { starting: "Starting recorder…", stopping: "Stopping…", cleaning: "Cleaning up…", idle: "" }[this.#phase];
       text = this.#ctx.ui.theme.fg("muted", label);
     }
     if (text === this.#lastText) return;
@@ -183,6 +187,12 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     return ctx.ui.theme.fg("error", `● REC ${elapsed}`)
       + ctx.ui.theme.fg("muted", ` · ${hints.filter(Boolean).join(" · ")}`);
   }
+  function processingText(ctx: ExtensionContext, phase: ProcessingPhase): string {
+    return ctx.ui.theme.fg("muted", [
+      ctx.ui.theme.style("oaistt", { fg: "text", bold: true }), `${phase}…`,
+      keyHint(ctx, activeBindings, "operation.cancel", "cancel"),
+    ].filter(Boolean).join(" · "));
+  }
   pi.on("session_start", async (_event, ctx) => {
     if (scope) await teardown("session changed");
     if (ctx.mode !== "tui") return;
@@ -236,7 +246,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       controller.cancel("editor changed"); feedback.clear();
       if (!resultFinished && !lostEditorNotice) { lostEditorNotice = true; notice(ctx, `${manual ? "Draft correction" : "Dictation"} discarded: editor changed.`); }
       return false;
-    }, elapsed => recordingText(ctx, elapsed));
+    }, elapsed => recordingText(ctx, elapsed), phase => processingText(ctx, phase));
     current.feedback = feedback;
     const stillOwned = () => {
       if (delivery.isCurrent()) return true;

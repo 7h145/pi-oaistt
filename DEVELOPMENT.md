@@ -158,6 +158,10 @@ muted with bold neutral brand/keys. Cancellation is independent; unbound/conflic
 hints are omitted, all-unbound keeps REC/brand, and pending keys cannot change hints.
 Pi owns wrapping/clipping. Existing timers, theme refresh and owned clearing remain;
 no process/probe is added. Start/correction hints never appear during recording.
+Transcription and automatic/manual correction show `oaistt · transcribing…` or
+`oaistt · correcting…` with the active cancel hint, using the same neutral palette.
+No stop hint is shown; unbound/conflicting cancel keys are omitted, pending keys
+stay inactive, and theme/ownership refresh and clearing apply to these lines too.
 
 Status shares the muted/neutral-bold palette and uses ordered profile/model/key
 bullet lists. Only the first candidate is bold, not a proven usable/live selection.
@@ -179,13 +183,18 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 493 synthetic tests and typechecking pass** against Pi
+**Latest full baseline: 529 synthetic tests and typechecking pass** against Pi
 0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Recording covers 14
 binding scenarios in regular/fullscreen, segmented colors, elapsed/theme refresh,
-pending-key stability and processing/clearing. Footer-write guards and stock/custom
-footer snapshots verify no footer changes, including unrelated extension statuses.
+pending-key stability and processing/clearing. Processing guidance covers six
+cancel-binding scenarios across transcription and automatic/manual correction in
+regular/fullscreen while busy: exact styling, theme/pending-key refresh, widths
+12–120, real shortcut cancellation, late-result rejection and unchanged drafts/
+footers/main-agent signals. Processing-line presentation is not live-qualified.
+Footer-write guards and stock/custom footer snapshots verify no footer changes,
+including unrelated extension statuses.
 These automated checks do not requalify host Pi 1.0.2.
 
 Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen

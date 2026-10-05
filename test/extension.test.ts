@@ -37,6 +37,12 @@ function statusSection(text: string, title: string): string {
   assert.ok(index >= 0, `Missing status section: ${title}`);
   return text.slice(index + marker.length).split("\n\n")[0]!;
 }
+function expectedProcessingText(theme: ExtensionContext["ui"]["theme"], phase: string, keys = "F12"): string {
+  let text = `${theme.style("oaistt", { fg: "text", bold: true })} · ${phase}…`;
+  if (keys) text += ` · ${theme.style(keys, { fg: "text", bold: true })} cancel`;
+  return theme.fg("muted", text);
+}
+
 const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
@@ -336,7 +342,7 @@ test("processing feedback refreshes the current theme, not cached phase ANSI col
   assert.equal(h.controller.phase, "transcribing");
   const before = h.widgetText();
   initTheme("light", false);
-  const expected = h.ui.theme.fg("muted", "Transcribing…"); assert.notEqual(before, expected);
+  const expected = expectedProcessingText(h.ui.theme, "transcribing"); assert.notEqual(before, expected);
   t.mock.timers.tick(1000);
   assert.deepEqual(h.widgets.get(WIDGET_KEY), [expected]);
 });
@@ -1119,8 +1125,75 @@ test("recording guidance refreshes theme and elapsed time but ignores pending co
   assert.equal(h.signals[0]!.aborted, false); assert.equal(h.counts().captures, 1);
   h.f8(); await nextTask();
   assert.equal(h.controller.phase, "transcribing");
-  assert.equal(h.widgetText(), h.ui.theme.fg("muted", "Transcribing…"));
-  assert.doesNotMatch(h.widgetText()!, /REC|oaistt|stop|cancel/);
+  assert.equal(h.widgetText(), expectedProcessingText(h.ui.theme, "transcribing"));
+  assert.doesNotMatch(h.widgetText()!, /REC|stop/);
   h.f12(); await h.controller.settled();
   assert.equal(h.widgets.get(WIDGET_KEY), undefined);
 });
+
+const processingCases = [
+  { name: "defaults", keys: {}, cancel: "F12", sequence: "\x1b[24~" },
+  { name: "rebound", keys: { "operation.cancel": "f11" }, cancel: "F11", sequence: "\x1b[23~" },
+  { name: "multiple", keys: { "operation.cancel": ["f12", "shift+f12"] }, cancel: "F12 / Shift+F12", sequence: "\x1b[24~" },
+  { name: "unbound", keys: { "operation.cancel": [] }, cancel: "", sequence: "" },
+  { name: "native conflict", keys: { "operation.cancel": "f6" }, cancel: "", sequence: "", native: { "app.model.select": "f6" } },
+  { name: "own conflict", keys: { "operation.cancel": "f8" }, cancel: "", sequence: "" },
+] as const;
+const processingModes = [
+  { name: "transcription", phase: "transcribing", manual: false },
+  { name: "automatic correction", phase: "correcting", manual: false },
+  { name: "manual correction", phase: "correcting", manual: true },
+] as const;
+for (const fullscreen of [false, true]) for (const mode of processingModes) for (const row of processingCases) {
+  test(`processing guidance: ${mode.name}/${row.name}/${fullscreen ? "fullscreen" : "regular"}`, async (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    const h = harness({ fullscreen, nativeWidgets: true, streaming: true, bindings: "native" in row ? row.native : undefined });
+    h.setConfig(parseConfig({ keybindings: row.keys, correction: { automatic: true } }));
+    Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("guidance must not read main identity"); } });
+    h.ctx.modelRegistry = { find: () => { throw new Error("guidance must not probe models"); } } as unknown as ModelRegistry;
+    const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
+    h.footerStatuses.set("other-extension", "OTHER_STATUS");
+    await h.start(); h.ui.setEditorText("synthetic draft");
+    const footerBefore = plain(h.mode.footerContainer.render(120).join("\n"));
+    if (mode.manual) { h.f7(); await nextTask(); }
+    else {
+      await h.command("dictation start"); await nextTask(); await h.command("dictation stop"); await nextTask();
+      if (mode.phase === "correcting") { h.raw.resolve("synthetic dictation"); await nextTask(); }
+    }
+    assert.equal(h.controller.phase, mode.phase);
+    const expected = `oaistt · ${mode.phase}…${row.cancel ? ` · ${row.cancel} cancel` : ""}`;
+    const before = h.widgetText()!;
+    assert.equal(plain(before), expected);
+    assert.equal(before, expectedProcessingText(h.ui.theme, mode.phase, row.cancel));
+    assert.ok(before.startsWith(h.ui.theme.getFgAnsi("muted")));
+    assert.ok(!before.includes(h.ui.theme.getFgAnsi("error")));
+    assert.doesNotMatch(plain(before), /REC|stop|start|unbound|ready/);
+    assert.ok(plain(h.mode.widgetContainerAbove.render(120).join("\n")).includes(expected));
+    for (const width of [12, 20, 32, 80, 120]) {
+      for (const line of h.mode.widgetContainerAbove.render(width)) assert.ok(visibleWidth(line) <= width);
+    }
+    // Settings-only reload must not advertise a key that is not installed.
+    h.setConfig(parseConfig({ keybindings: { "operation.cancel": "f10" } }));
+    await h.command("reload"); initTheme("light", false); t.mock.timers.tick(1000);
+    assert.equal(plain(h.widgetText()!), expected);
+    assert.equal(h.widgetText(), expectedProcessingText(h.ui.theme, mode.phase, row.cancel));
+    assert.notEqual(h.widgetText(), before);
+    assert.equal(h.signals.at(-1)!.aborted, false);
+    if (row.sequence) h.terminal.send(row.sequence);
+    else {
+      h.f12(); assert.equal(h.signals.at(-1)!.aborted, false);
+      await h.command("cancel");
+    }
+    assert.equal(h.signals.at(-1)!.aborted, true);
+    assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+    await h.controller.settled();
+    h.raw.resolve("synthetic late dictation"); h.edited.resolve({ kind: "corrected", text: "synthetic late correction" });
+    await nextTask(); t.mock.timers.tick(1000);
+    assert.equal(h.ui.getEditorText(), "synthetic draft");
+    assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+    assert.deepEqual(h.footerStatuses, new Map([["other-extension", "OTHER_STATUS"]]));
+    assert.equal(plain(h.mode.footerContainer.render(120).join("\n")), footerBefore);
+    assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+    assert.equal(h.counts().captures, mode.manual ? 0 : 1);
+  });
+}

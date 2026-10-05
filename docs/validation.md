@@ -115,6 +115,11 @@ to make tests pass. Normal exhaustion is raw/unchanged; cancellation is no resul
   All-unbound recording shows only REC/timer/brand, not invented default keys.
   Only REC/timer is red; theme changes refresh the neutral guidance. Pending keys
   must not change these hints, and leaving recording/ownership must clear them.
+- During transcription and automatic/F7 correction, check `oaistt · transcribing…`
+  / `oaistt · correcting…` with only the active cancel hint (default `F12 cancel`).
+  Check rebound/multiple/unbound/conflicting keys, pending-key stability, neutral
+  colors/theme refresh, and clearing on phase/ownership changes. Cancel must prevent
+  insertion or leave the manual draft unchanged without aborting the main agent.
 - Check physical terminal/tmux interception, narrow regular/fullscreen layouts,
   theme changes and above-editor widget visibility. Stock/custom footers and other
   extensions' footer statuses must remain unchanged during work and cleanup.

@@ -261,6 +261,15 @@ slash commands still available. Pending configuration never changes the advertis
 active keys before full reload. Pi owns narrow-terminal wrapping/clipping; the
 existing elapsed/theme refresh and ownership-scoped clearing are unchanged.
 
+Transcription and both automatic/manual correction show
+`oaistt · transcribing… · F12 cancel` or `oaistt · correcting… · F12 cancel`.
+These lines use the same muted words/separators and bold `text` brand/keys, with
+no red indicator or stop hint. Cancel uses active, conflict-filtered bindings;
+unbound/conflicting keys are omitted, and pending keys wait for full Pi `/reload`.
+Cancellation prevents dictation insertion or leaves the manual draft unchanged;
+it never aborts the main agent. The widget refreshes with the theme and clears
+when processing or ownership ends.
+
 The status header identifies the loaded installation, for example
 `oaistt v0.2.1 (1234abc): idle. Configuration loaded successfully.` Version comes
 from its own `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
