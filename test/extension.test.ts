@@ -659,18 +659,33 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
     assert.match(text, /\(d t\) means \/oaistt d t/);
     assert.match(text, /transcription profile NAME \[--save\] \(t p\)/);
-    const notes = [
-      "  Without NAME, source/profile commands report selection/usage without changing it.",
-      "  Device/profile selections are temporary; add --save to keep the choice in configuration. Host audio settings stay unchanged.", "",
-      "  Settings reload leaves active dictation/correction unchanged.",
-      "  Key or extension-code changes require Pi /reload, which cancels dictation or correction in progress.",
+    const heading = " Notes:", notes = [
+      "  • Without NAME, source/profile commands show the current selection and",
+      "    usage without changing it.",
+      "  • Device/profile choices are temporary. Add --save to keep a choice in",
+      "    configuration. Host audio settings remain unchanged.",
+      "  • Settings reload affects subsequent work only. Active dictation or",
+      "    correction stays unchanged.",
+      "  • Key or extension-code changes require full Pi /reload. This cancels",
+      "    dictation or correction in progress.",
     ];
-    assert.deepEqual(text.split("\nNotes:\n")[1]!.split("\n"), notes);
-    // Wide terminals show each note intact; narrow terminals wrap it themselves.
+    assert.deepEqual(text.split(`\n${heading}\n`)[1]!.split("\n"), notes);
+    for (const line of notes) {
+      assert.ok(visibleWidth(line) <= 72);
+      if (line.includes("•")) assert.equal(line.indexOf("•"), heading.indexOf("o"));
+      else assert.equal(line.search(/\S/u), 4);
+    }
+    // Wide terminals retain the explicit breaks and relative indentation.
     const wideLines = h.mode.chatContainer.render(180).map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
-    for (const note of notes.filter(Boolean)) assert.ok(wideLines.some(line => line.includes(note.trim())));
-    assert.equal(text.split("add --save").length - 1, 1);
-    assert.ok(text.indexOf("add --save") > text.indexOf("Notes:"));
+    const notesIndex = wideLines.findIndex(line => line.trim() === "Notes:");
+    assert.ok(notesIndex >= 0);
+    for (const [index, note] of notes.entries()) {
+      const line = wideLines[notesIndex + index + 1]!;
+      assert.equal(line.trim(), note.trim());
+      if (line.includes("•")) assert.equal(line.indexOf("•"), wideLines[notesIndex]!.indexOf("o"));
+    }
+    assert.equal(text.split("Add --save").length - 1, 1);
+    assert.ok(text.indexOf("Add --save") > text.indexOf("Notes:"));
     assert.doesNotMatch(text, /main agent|transcription source|\(t s\)|short forms also follow|not audio|Escape remains/);
     assert.match(text, /F8\s+Start or stop dictation/);
     assert.match(text, /F7\s+Correct the current draft/);
