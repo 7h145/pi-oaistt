@@ -181,7 +181,7 @@ missing state, pending keys and read-only active ownership. Recording covers 14
 binding scenarios in regular/fullscreen, segmented colors, elapsed/theme refresh,
 pending-key stability and processing/clearing. Footer-write guards and stock/custom
 footer snapshots verify no footer changes, including unrelated extension statuses.
-No live widget-only-placement test or host Pi 1.0.2 requalification is claimed.
+These automated checks do not requalify host Pi 1.0.2.
 
 Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen
 settings and newer-choice races. Installed identity covers optional/malformed
@@ -232,7 +232,8 @@ The owner reports roughly **100 capture/correction runs** and accepts:
 - **V4 correction/model quality:** acceptable; possible prompt/config tuning is
   optional, with no urgent need.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
-  workflow. Help/status UX and recording-guidance text/behavior are owner-confirmed.
+  workflow. Help/status UX is owner-confirmed. A live dictation smoke test confirms
+  the clean footer, above-editor line, guidance and working cancellation.
 
 These are owner-reported live observations, not an independently measured matrix
 for every provider, thinking level, terminal or widget layout. No utterances,
@@ -246,7 +247,7 @@ recordings or private configuration are retained.
 | V4 | Correction/model quality | Owner-accepted; tuning optional |
 | V5 | F7/draft preservation | Clipboard/images, undo and edit-cancellation cases remain open |
 | V6 | Busy/lifecycle paths | Live busy/compaction/navigation/reload cases remain open |
-| V7 | Keys/presentation | Owner-accepted for Neovim/tmux workflow |
+| V7 | Keys/presentation | Owner-accepted for Neovim/tmux; widget-only layout, guidance and cancel smoke-tested |
 | V8 | Preferences/persistence | Live selection/fallback/save/reload cases remain open |
 | V9 | CI/release hygiene | Hosted Node 24 failed; fixture fix validation and dependency review remain open |
 
