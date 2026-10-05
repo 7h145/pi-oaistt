@@ -229,7 +229,7 @@ The owner reports roughly **100 capture/correction runs** and accepts:
 - **V4 correction/model quality:** acceptable; possible prompt/config tuning is
   optional, with no urgent need.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
-  workflow and is good enough. Help was also previously owner-confirmed.
+  workflow. The owner confirms improved UX for separate help and list-based status.
 
 These are owner-reported live observations, not an independently measured matrix
 for every provider, thinking level, terminal or footer variant. No utterances,

@@ -250,7 +250,7 @@ omitted independently. `see /oaistt help` always remains. This is orientation,
 not a microphone/provider readiness check.
 
 The status header identifies the loaded installation, for example
-`oaistt v0.2.0 (1234abc): idle. Configuration loaded successfully.` Version comes
+`oaistt v0.2.1 (1234abc): idle. Configuration loaded successfully.` Version comes
 from its own `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
 not a guarantee of an unchanged working tree. Git is optional: npm/non-Git installs
 show the version alone. Only Git metadata at the resolved package root is used;
