@@ -380,12 +380,11 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       command("/oaistt help (h)", "Show this help"),
       command("/oaistt reload (rl)", "Reload settings for subsequent work"), "",
       strong("Notes:"),
+      // One logical line per note; Pi wraps at the available notice width.
       "  Without NAME, source/profile commands report selection/usage without changing it.",
-      "  Device/profile selections are temporary; add --save to keep the",
-      "  choice in configuration. Host audio settings stay unchanged.", "",
+      "  Device/profile selections are temporary; add --save to keep the choice in configuration. Host audio settings stay unchanged.", "",
       "  Settings reload leaves active dictation/correction unchanged.",
-      "  Key or extension-code changes require Pi /reload, which cancels",
-      "  dictation or correction in progress.",
+      "  Key or extension-code changes require Pi /reload, which cancels dictation or correction in progress.",
     ].join("\n");
   }
   function help(ctx: ExtensionContext): void {

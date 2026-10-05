@@ -190,9 +190,10 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 **Latest full baseline: 529 synthetic tests and typechecking pass** against Pi
 0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
-missing state, pending keys and read-only active ownership. Recording covers 14
-binding scenarios in regular/fullscreen, segmented colors, elapsed/theme refresh,
-pending-key stability and processing/clearing. Processing guidance covers six
+missing state, pending keys and read-only active ownership. Help Notes use complete
+logical lines, with native narrow/wide wrapping rather than fixed-column breaks.
+Recording covers 14 binding scenarios in regular/fullscreen, segmented colors,
+elapsed/theme refresh, pending-key stability and processing/clearing. Processing guidance covers six
 cancel-binding scenarios across transcription and automatic/manual correction in
 regular/fullscreen while busy: exact styling, theme/pending-key refresh, widths
 12–120, real shortcut cancellation, late-result rejection and unchanged drafts/

@@ -659,8 +659,16 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
     assert.match(text, /\(d t\) means \/oaistt d t/);
     assert.match(text, /transcription profile NAME \[--save\] \(t p\)/);
-    assert.ok(text.includes("Settings reload leaves active dictation/correction unchanged."));
-    assert.ok(text.includes("Key or extension-code changes require Pi /reload, which cancels\n  dictation or correction in progress."));
+    const notes = [
+      "  Without NAME, source/profile commands report selection/usage without changing it.",
+      "  Device/profile selections are temporary; add --save to keep the choice in configuration. Host audio settings stay unchanged.", "",
+      "  Settings reload leaves active dictation/correction unchanged.",
+      "  Key or extension-code changes require Pi /reload, which cancels dictation or correction in progress.",
+    ];
+    assert.deepEqual(text.split("\nNotes:\n")[1]!.split("\n"), notes);
+    // Wide terminals show each note intact; narrow terminals wrap it themselves.
+    const wideLines = h.mode.chatContainer.render(180).map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+    for (const note of notes.filter(Boolean)) assert.ok(wideLines.some(line => line.includes(note.trim())));
     assert.equal(text.split("add --save").length - 1, 1);
     assert.ok(text.indexOf("add --save") > text.indexOf("Notes:"));
     assert.doesNotMatch(text, /main agent|transcription source|\(t s\)|short forms also follow|not audio|Escape remains/);
