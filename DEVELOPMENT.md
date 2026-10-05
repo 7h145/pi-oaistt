@@ -256,8 +256,9 @@ The owner reports roughly **100 capture/correction runs** and accepts:
   naming. This is an end-to-end smoke check, not attribution to STT or correction;
   false contextual matches and deliberate repetition/emphasis/voice remain untested.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
-  workflow. Help/status UX is owner-confirmed. A live dictation smoke test confirms
-  the clean footer, above-editor line, guidance and working cancellation.
+  workflow. Help/status UX, including Notes wrapping/alignment, is owner-confirmed.
+  A live dictation smoke test confirms the clean footer, above-editor line, guidance
+  and working cancellation.
 
 These are owner-reported live observations, not an independently measured matrix
 for every provider, thinking level, terminal or widget layout. No utterances,
