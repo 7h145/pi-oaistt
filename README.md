@@ -36,9 +36,9 @@ transcription is inserted. Correction is also useful without audio:
 press **F7** to clean up the current draft using bounded conversation
 context to help preserve technical names, terminology, tone, and intent.
 
-Both workflows work while the main agent is busy. Progress appears above
-the editor and in compatible footers. **F12** cancels pi-oaistt without
-aborting the main agent; Escape keeps its normal Pi behavior.
+Both workflows work while the main agent is busy. Progress appears in one widget
+above the editor. **F12** cancels pi-oaistt without aborting the main agent;
+Escape keeps its normal Pi behavior.
 
 ## Requirements
 

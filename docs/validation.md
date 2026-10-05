@@ -116,8 +116,9 @@ to make tests pass. Normal exhaustion is raw/unchanged; cancellation is no resul
   Only REC/timer is red; theme changes refresh the neutral guidance. Pending keys
   must not change these hints, and leaving recording/ownership must clear them.
 - Check physical terminal/tmux interception, narrow regular/fullscreen layouts,
-  theme changes, stock/compositor/replacement footers and widget visibility.
-  Warnings/notices/status must not duplicate, outlive ownership or become context.
+  theme changes and above-editor widget visibility. Stock/custom footers and other
+  extensions' footer statuses must remain unchanged during work and cleanup.
+  Feedback must not duplicate, outlive ownership or become context.
 
 Record the matrix separately: normal Linux / owner-approved boxed; local / remote
 compatible STT; each selected correction provider; physical terminal/tmux and busy/

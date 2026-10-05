@@ -132,7 +132,7 @@ Source/profile saves serialize read/validate/modify/private atomic replacement
 through Pi's public file mutation queue, preserving unrelated fields. Defaults,
 listing and temporary choices do not write configuration.
 
-Feedback uses public status/widget APIs without replacing the footer. Each help,
+Progress uses one public above-editor widget; footer APIs are not used. Each help,
 status or settings-reload response is one composed notification so consecutive
 informational notices cannot hide command help or pending bindings. Profile tools
 expose bounded selection metadata, not audio, drafts, endpoints or credentials;
@@ -179,8 +179,9 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Recording covers 14
 binding scenarios in regular/fullscreen, segmented colors, elapsed/theme refresh,
-pending-key stability and processing/clearing. No new live test or host Pi 1.0.2
-requalification is claimed.
+pending-key stability and processing/clearing. Footer-write guards and stock/custom
+footer snapshots verify no footer changes, including unrelated extension statuses.
+No live widget-only-placement test or host Pi 1.0.2 requalification is claimed.
 
 Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen
 settings and newer-choice races. Installed identity covers optional/malformed
@@ -202,7 +203,7 @@ local matrix passes, but a hosted rerun is still needed for CI confirmation.
 | Recorder | Missing tool subsets, executable-access faults, cancellation, isolated PATH lookup with fake clients, redacted server failures and owned capture/cleanup |
 | STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
 | Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
-| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, coalesced help/status rendering, neutral list-based sections and candidate identities, scoped fallback, no model probes, frozen-versus-next selection, bounded metadata, narrow/wide-character/theme/footer layouts, pending keys and exact aliases |
+| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, coalesced help/status rendering, neutral list-based sections and candidate identities, scoped fallback, no model probes, frozen-versus-next selection, bounded metadata, widget layouts/themes and footer noninterference, pending keys and exact aliases |
 | Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
 | Documentation | Runnable JSON examples, exact default settings and explicit example order |
 
@@ -231,10 +232,10 @@ The owner reports roughly **100 capture/correction runs** and accepts:
 - **V4 correction/model quality:** acceptable; possible prompt/config tuning is
   optional, with no urgent need.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
-  workflow. The owner confirms improved UX for separate help and list-based status.
+  workflow. Help/status UX and recording-guidance text/behavior are owner-confirmed.
 
 These are owner-reported live observations, not an independently measured matrix
-for every provider, thinking level, terminal or footer variant. No utterances,
+for every provider, thinking level, terminal or widget layout. No utterances,
 recordings or private configuration are retained.
 
 | ID | Target | Current acceptance |

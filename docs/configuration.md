@@ -249,8 +249,9 @@ hints. An incomplete pair omits dictation. Unbound correction/cancel hints are
 omitted independently. `see /oaistt help` always remains. This is orientation,
 not a microphone/provider readiness check.
 
-During recording, one logical feedback line (also mirrored to the footer status)
-shows `● REC 00:05 · oaistt · F8 stop · F12 cancel` with active, conflict-filtered
+Progress uses one owner-scoped widget above the editor. oaistt neither writes
+footer statuses nor replaces the footer. During recording, the widget shows
+`● REC 00:05 · oaistt · F8 stop · F12 cancel` with active, conflict-filtered
 bindings. Only the REC indicator/timer is red; separators/words are muted and
 brand/keys use bold `text`. Toggle takes precedence, otherwise use an explicit
 stop key; unlike startup, no start/stop pair is required once recording is active.

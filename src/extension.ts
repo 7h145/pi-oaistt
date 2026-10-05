@@ -23,7 +23,6 @@ import { DictationError, OperationController, type DeliveryOwner, type Phase, ty
 import { recordParecord, listRecordingSources } from "./recorder.ts";
 import { transcribe, prepareAudio, transcriptionChain, transcriptionCandidates, TranscriptionFailure } from "./transcription.ts";
 
-export const STATUS_KEY = "footer-compositor:right:80:pi-oaistt";
 export const WIDGET_KEY = "pi-oaistt";
 const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/profile NAME [--save] | reload. Key changes require full Pi /reload.";
 const displayKeys = (keys: string[]): string => keys.map(key => key.split("+").map(part =>
@@ -48,7 +47,7 @@ interface Scope {
   ctx: ExtensionContext; id: string; boundary?: EditorBoundary; feedback?: Feedback; abort: AbortController;
 }
 
-/** One short public widget also covers footers that ignore extension statuses. */
+/** One owner-scoped feedback widget above the editor. */
 class Feedback {
   #ctx: ExtensionContext;
   #clock: () => number;
@@ -90,13 +89,11 @@ class Feedback {
     }
     if (text === this.#lastText) return;
     this.#lastText = text;
-    this.#ctx.ui.setStatus(STATUS_KEY, text);
     this.#ctx.ui.setWidget(WIDGET_KEY, [text], { placement: "aboveEditor" });
   }
   clear(): void {
     clearInterval(this.#timer); this.#timer = undefined; this.#phase = "idle"; this.#lastText = undefined;
     if (!this.#current()) return;
-    this.#ctx.ui.setStatus(STATUS_KEY, undefined);
     this.#ctx.ui.setWidget(WIDGET_KEY, undefined);
   }
 }

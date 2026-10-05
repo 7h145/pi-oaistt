@@ -42,7 +42,7 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, refreshOnCreate: false });
     const runner = new ExtensionRunner(loaded.extensions, loaded.runtime, dir, SessionManager.inMemory(dir), new ModelRegistry(runtime));
     const notices: string[] = [];
-    runner.setUIContext({ ...native.ui, notify: (message) => { notices.push(message); }, setStatus: () => {}, setWidget: () => {} }, "tui");
+    runner.setUIContext({ ...native.ui, notify: (message) => { notices.push(message); }, setStatus: () => { throw new Error("oaistt must not write footer statuses"); }, setWidget: () => {} }, "tui");
     const command = runner.getCommand("oaistt"); assert.ok(command);
     await runner.emit({ type: "session_start", reason: "startup" });
     assert.ok(runner.getShortcuts({}).has("f8"));
@@ -71,7 +71,7 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     const fresh = await discoverAndLoadExtensions([], dir, agentDir);
     assert.deepEqual(fresh.errors, []);
     const next = new ExtensionRunner(fresh.extensions, fresh.runtime, dir, SessionManager.inMemory(dir), new ModelRegistry(runtime));
-    const nextUI = { ...native.ui, notify: (message: string) => notices.push(message), setStatus: () => {}, setWidget: () => {} };
+    const nextUI = { ...native.ui, notify: (message: string) => notices.push(message), setStatus: () => { throw new Error("oaistt must not write footer statuses"); }, setWidget: () => {} };
     next.setUIContext(nextUI, "tui");
     native.mode.createExtensionUIContext = () => nextUI;
     await next.emit({ type: "session_start", reason: "reload" });

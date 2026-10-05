@@ -17,7 +17,7 @@ import { setImmediate as nextTask } from "node:timers/promises";
 import { SessionManager, initTheme, type ExtensionAPI, type ExtensionContext, type ExtensionCommandContext,
   type ModelRegistry, type RegisteredCommand } from "@earendil-works/pi-coding-agent";
 import { ConfigStore, parseConfig, type Config } from "../src/config.ts";
-import { registerDictation, STATUS_KEY, WIDGET_KEY, type Dependencies } from "../src/extension.ts";
+import { registerDictation, WIDGET_KEY, type Dependencies } from "../src/extension.ts";
 import { createPiUI } from "./pi-ui-fixture.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,25 +41,22 @@ const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
 function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean; compacting?: boolean; fullscreen?: boolean;
-  identity?: Dependencies["identity"]; store?: Dependencies["store"]; sources?: Dependencies["sources"]; nativeFeedback?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
+  identity?: Dependencies["identity"]; store?: Dependencies["store"]; sources?: Dependencies["sources"]; nativeWidgets?: boolean; nativeNotifications?: boolean; attempt?: Dependencies["transcribe"]; correction?: Dependencies["correct"]; bindings?: import("@earendil-works/pi-tui").KeybindingsConfig } = {}) {
   const native = createPiUI({ streaming: options.streaming, compacting: options.compacting,
     mode: options.fullscreen ? "fullscreen" : "regular", bindings: options.bindings, notifications: options.nativeNotifications });
   const notices: string[] = [];
   const styledNotices: string[] = [];
   const categories: string[] = [];
-  const statuses = new Map<string, string | undefined>();
   const widgets = new Map<string, string[] | undefined>();
   const ui = { ...native.ui,
     notify: (text: string, category: "info" | "warning" | "error" = "info") => {
       categories.push(category); styledNotices.push(text); notices.push(text.replace(/\x1b\[[0-9;]*m/g, ""));
       if (options.nativeNotifications) native.ui.notify(text, category);
     },
-    setStatus: (key: string, value: string | undefined) => {
-      statuses.set(key, value); if (options.nativeFeedback) native.ui.setStatus(key, value);
-    },
+    setStatus: () => { throw new Error("oaistt must not write footer statuses"); },
     setWidget: (key: string, value: unknown) => {
       assert.ok(value === undefined || Array.isArray(value)); widgets.set(key, value as string[] | undefined);
-      if (options.nativeFeedback) native.ui.setWidget(key, value as string[] | undefined, { placement: "aboveEditor" });
+      if (options.nativeWidgets) native.ui.setWidget(key, value as string[] | undefined, { placement: "aboveEditor" });
     },
   };
   Object.defineProperty(ui, "theme", { get: () => native.ui.theme });
@@ -129,7 +126,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   native.mode.setupExtensionShortcuts({ getModelRegistry: () => ctx.modelRegistry, getShortcuts: () => shortcuts as any });
   native.mode.defaultEditor.onEscape = () => main.abort();
   open.push(async () => { await emit("session_shutdown", { reason: "quit" }); native.stop(); });
-  return { ...native, ctx, ui, notices, styledNotices, categories, statuses, widgets, config, signals, settings, ready, raw, edited, main, emit,
+  return { ...native, ctx, ui, notices, styledNotices, categories, widgets, widgetText: () => widgets.get(WIDGET_KEY)?.[0], config, signals, settings, ready, raw, edited, main, emit,
     controller: result.controller,
     start: async () => { await emit("session_start", { reason: "startup" }); native.mode.setupExtensionShortcuts({ getModelRegistry: () => ctx.modelRegistry, getShortcuts: () => shortcuts as any }); },
     tools, targets, correctionOptions,
@@ -152,13 +149,13 @@ for (const fullscreen of [false, true]) for (const busy of ["idle", "streaming",
     assert.equal(h.counts().loads, 0); assert.equal(h.counts().captures, 0);
     await h.start(); h.f8(); await nextTask();
     assert.equal(h.controller.phase, "recording");
-    assert.match(h.statuses.get(STATUS_KEY)!, /REC 00:00/); assert.ok(h.widgets.get(WIDGET_KEY));
+    assert.match(h.widgetText()!, /REC 00:00/); assert.ok(h.widgets.get(WIDGET_KEY));
     h.ui.setEditorText("typing continues\n"); h.f8(); await nextTask();
     assert.equal(h.controller.phase, "transcribing"); assert.equal(h.counts().captures, 1);
     h.raw.resolve("synthetic dictation"); await h.controller.settled(); await nextTask();
     assert.equal(h.ui.getEditorText(), "typing continues\nsynthetic dictation");
     assert.equal(h.promptCalls.length, 0); assert.equal(h.main.signal.aborted, false);
-    assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+    assert.equal(h.widgets.get(WIDGET_KEY), undefined);
   });
 }
 
@@ -189,7 +186,7 @@ test("main Escape is forwarded, does not cancel dictation; distinct cancel clear
   assert.equal(h.main.signal.aborted, true); assert.equal(h.signals[0]!.aborted, false);
   await h.command("cancel"); await h.command("cancel"); await h.controller.settled();
   assert.equal(h.notices.filter((text) => text === "Dictation cancelled.").length, 1);
-  assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+  assert.equal(h.widgets.get(WIDGET_KEY), undefined);
 });
 
 for (const event of ["session_before_switch", "session_before_fork", "session_before_tree"] as const) {
@@ -217,12 +214,12 @@ test("published elapsed counter and widget clear after cancellation with held cl
   t.mock.timers.enable({ apis: ["setInterval"] });
   const h = harness(); await h.start(); await h.command("dictation toggle"); await nextTask();
   h.setClock(12000); t.mock.timers.tick(1000);
-  assert.match(h.statuses.get(STATUS_KEY)!, /REC 00:12/);
+  assert.match(h.widgetText()!, /REC 00:12/);
   const clean = deferred<void>(); h.holdCleanup(clean.promise);
   await h.command("cancel"); await nextTask();
-  assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+  assert.equal(h.widgets.get(WIDGET_KEY), undefined);
   await h.command("dictation toggle"); assert.equal(h.counts().captures, 1);
-  t.mock.timers.tick(5000); assert.equal(h.statuses.get(STATUS_KEY), undefined);
+  t.mock.timers.tick(5000); assert.equal(h.widgetText(), undefined);
   clean.resolve(); await h.controller.settled();
 });
 
@@ -234,7 +231,7 @@ test("editor factory takeover is not undone; owned capture is discarded and feed
   t.mock.timers.tick(1000); await h.controller.settled(); await nextTask();
   assert.equal(h.ui.getEditorComponent(), other);
   assert.equal(h.notices.filter((text) => text.includes("editor changed")).length, 1);
-  assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+  assert.equal(h.widgets.get(WIDGET_KEY), undefined);
 });
 
 test("temporary source/reloaded settings cannot change active operation or its displayed capture device", async () => {
@@ -253,7 +250,7 @@ test("invalid config blocks capture; explicit config reload recovers", async () 
     const handlers = new Map<string, (event: any, ctx: ExtensionContext) => unknown>();
     const notices: string[] = [];
     const ctx = { mode: "tui", hasUI: true, ui: { ...native.ui, notify: (text: string) => notices.push(text),
-      setStatus: () => {}, setWidget: () => {} },
+      setStatus: () => { throw new Error("oaistt must not write footer statuses"); }, setWidget: () => {} },
       sessionManager: SessionManager.inMemory("/synthetic"), isIdle: native.isIdle } as unknown as ExtensionContext;
     const store = new ConfigStore(dir);
     let starts = 0;
@@ -337,35 +334,37 @@ test("processing feedback refreshes the current theme, not cached phase ANSI col
   t.mock.timers.enable({ apis: ["setInterval"] });
   const h = harness(); await h.start(); await h.command("dictation toggle"); await nextTask(); await h.command("dictation toggle"); await nextTask();
   assert.equal(h.controller.phase, "transcribing");
-  const before = h.statuses.get(STATUS_KEY);
+  const before = h.widgetText();
   initTheme("light", false);
   const expected = h.ui.theme.fg("muted", "Transcribing…"); assert.notEqual(before, expected);
   t.mock.timers.tick(1000);
-  assert.equal(h.statuses.get(STATUS_KEY), expected); assert.deepEqual(h.widgets.get(WIDGET_KEY), [expected]);
+  assert.deepEqual(h.widgets.get(WIDGET_KEY), [expected]);
 });
 
 for (const fullscreen of [false, true]) for (const width of [12, 20, 80]) for (const replacement of [false, true]) {
-  test(`native feedback rendering ${fullscreen ? "fullscreen" : "regular"}/${width}/${replacement ? "replacement" : "stock"} footer`, async () => {
-    const h = harness({ fullscreen, nativeFeedback: true }); h.terminal.columns = width;
+  test(`widget-only feedback leaves ${replacement ? "custom" : "stock"} footer untouched: ${fullscreen ? "fullscreen" : "regular"}/${width}`, async () => {
+    const h = harness({ fullscreen, nativeWidgets: true }); h.terminal.columns = width;
+    h.footerStatuses.set("other-extension", "OTHER_STATUS");
     const custom = { render: () => ["OTHER"], invalidate: () => {} };
     if (replacement) h.ui.setFooter(() => custom);
-    await h.start(); await h.command("dictation toggle"); await nextTask();
+    await h.start();
+    const footerBefore = h.mode.footerContainer.render(width), statusesBefore = new Map(h.footerStatuses);
+    await h.command("dictation toggle"); await nextTask();
     const widget = h.mode.widgetContainerAbove.render(width);
-    const footer = h.mode.footerContainer.render(width);
     const plain = (lines: string[]) => lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.match(plain(widget), /REC/); assert.match(plain(widget), /00:00/);
-    assert.ok([...widget, ...footer].every((line) => visibleWidth(line) <= width));
-    if (replacement) {
-      assert.equal(h.mode.customFooter, custom); assert.equal(plain(footer), "OTHER");
-    } else assert.match(plain(footer), /REC/);
+    assert.ok(widget.every(line => visibleWidth(line) <= width));
+    assert.deepEqual(h.mode.footerContainer.render(width), footerBefore);
+    assert.deepEqual(h.footerStatuses, statusesBefore);
+    assert.doesNotMatch(plain(h.mode.footerContainer.render(width)), /REC|oaistt|stop|cancel/);
+    if (replacement) assert.equal(h.mode.customFooter, custom);
     await h.command("cancel"); await h.controller.settled();
-    assert.equal(h.footerStatuses.has(STATUS_KEY), false);
     assert.equal(plain(h.mode.widgetContainerAbove.render(width)).trim(), "");
+    assert.deepEqual(h.mode.footerContainer.render(width), footerBefore);
+    assert.deepEqual(h.footerStatuses, statusesBefore);
     if (replacement) assert.equal(h.mode.customFooter, custom);
   });
 }
-
-
 
 test("editor takeover after delivery during held cleanup emits no false discard notice", async () => {
   const h = harness(); await h.start();
@@ -1071,13 +1070,13 @@ const recordingCases = [
 for (const fullscreen of [false, true]) for (const row of recordingCases) {
   test(`recording guidance: ${row.name}, ${fullscreen ? "fullscreen" : "regular"}`, async (t) => {
     t.mock.timers.enable({ apis: ["setInterval"] });
-    const h = harness({ fullscreen, nativeFeedback: true, bindings: "native" in row ? row.native : undefined });
+    const h = harness({ fullscreen, nativeWidgets: true, bindings: "native" in row ? row.native : undefined });
     h.setConfig(parseConfig({ keybindings: row.keys }));
     Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("guidance must not read main identity"); } });
     h.ctx.modelRegistry = { find: () => { throw new Error("guidance must not probe models"); } } as unknown as ModelRegistry;
     await h.start(); await h.command("dictation start"); await nextTask();
     h.setClock(5000); t.mock.timers.tick(1000);
-    const text = h.statuses.get(STATUS_KEY)!, plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+    const text = h.widgetText()!, plain = text.replace(/\x1b\[[0-9;]*m/g, "");
     const expected = `● REC 00:05 · oaistt${row.hints ? ` · ${row.hints}` : ""}`;
     assert.equal(plain, expected); assert.doesNotMatch(plain, /\n|to stop|to cancel|start|correct|unbound|ready/);
     assert.deepEqual(h.widgets.get(WIDGET_KEY), [text]);
@@ -1099,18 +1098,18 @@ for (const fullscreen of [false, true]) for (const row of recordingCases) {
     assert.equal(h.counts().captures, 1); assert.equal(h.signals[0]!.aborted, false);
     assert.equal(h.promptCalls.length, 0); assert.equal(h.main.signal.aborted, false);
     await h.command("cancel"); await h.controller.settled();
-    assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+    assert.equal(h.widgets.get(WIDGET_KEY), undefined);
   });
 }
 
 test("recording guidance refreshes theme and elapsed time but ignores pending configured keys", async (t) => {
   t.mock.timers.enable({ apis: ["setInterval"] });
-  const h = harness({ nativeFeedback: true }); await h.start(); h.f8(); await nextTask();
-  const before = h.statuses.get(STATUS_KEY)!;
+  const h = harness({ nativeWidgets: true }); await h.start(); h.f8(); await nextTask();
+  const before = h.widgetText()!;
   h.setConfig(parseConfig({ keybindings: { "dictation.toggle": "f9", "operation.cancel": "f10" } }));
   await h.command("reload");
   initTheme("light", false); h.setClock(12000); t.mock.timers.tick(1000);
-  const after = h.statuses.get(STATUS_KEY)!;
+  const after = h.widgetText()!;
   assert.notEqual(after, before);
   assert.equal(after.replace(/\x1b\[[0-9;]*m/g, ""), "● REC 00:12 · oaistt · F8 stop · F12 cancel");
   const indicator = h.ui.theme.fg("error", "● REC 00:12");
@@ -1120,8 +1119,8 @@ test("recording guidance refreshes theme and elapsed time but ignores pending co
   assert.equal(h.signals[0]!.aborted, false); assert.equal(h.counts().captures, 1);
   h.f8(); await nextTask();
   assert.equal(h.controller.phase, "transcribing");
-  assert.equal(h.statuses.get(STATUS_KEY), h.ui.theme.fg("muted", "Transcribing…"));
-  assert.doesNotMatch(h.statuses.get(STATUS_KEY)!, /REC|oaistt|stop|cancel/);
+  assert.equal(h.widgetText(), h.ui.theme.fg("muted", "Transcribing…"));
+  assert.doesNotMatch(h.widgetText()!, /REC|oaistt|stop|cancel/);
   h.f12(); await h.controller.settled();
-  assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+  assert.equal(h.widgets.get(WIDGET_KEY), undefined);
 });
