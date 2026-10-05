@@ -448,11 +448,97 @@ test("settings-only reload keeps manual frozen lease/request; full shutdown canc
   await h.emit("session_shutdown", { reason: "reload" }); h.edited.resolve({ kind: "corrected", text: "late" }); await nextTask();
   assert.equal(h.ui.getEditorText(), "draft");
 });
-test("source no-name is read-only, unsupported verbs/aliases cannot start or mutate", async () => {
+test("no-name source/profile commands report selection and usage without mutation", async () => {
   const { h, original, disk } = await sourceHarness();
-  for (const args of ["recorder source", "r s", "transcription source", "t s", "source fixture", "d s", "dictation", "transcription source --save"]) await h.command(args);
+  for (const args of ["recorder source", "r s", "transcription profile", "t p"]) {
+    await h.command(args);
+    assert.equal(h.categories.at(-1), "info");
+    assert.match(h.notices.at(-1)!, args.startsWith("r") ? /Recording source:.*Use recorder source NAME/
+      : /Next transcription profile: openai.*Use transcription profile NAME/);
+  }
   assert.deepEqual(await disk(), original); assert.equal(h.mode.extensionInput, undefined); assert.equal(h.counts().captures, 0);
 });
+
+for (const form of ["transcription profile", "t p"]) test(`${form}: temporary choice and explicit save share profile semantics`, async () => {
+  const { h, original, disk, store } = await sourceHarness();
+  const configured = { ...original, transcription: { ...original.transcription, order: ["openai", "remote"], profiles: {
+    ...original.transcription.profiles, remote: { ...original.transcription.profiles.openai, model: "fixture-remote" },
+  } } };
+  await writeFile(store.path, JSON.stringify(configured)); await h.command("reload");
+  h.ui.setEditorText("synthetic draft");
+  await h.command(`${form} remote`);
+  assert.equal(h.categories.at(-1), "info"); assert.equal(h.selection.selected, "remote");
+  assert.deepEqual(await disk(), configured); assert.equal(h.counts().captures, 0);
+  await h.command("dictation start"); await nextTask();
+  await h.command(`${form} openai`); assert.equal(h.selection.selected, "openai");
+  await h.command(`${form} remote --save`);
+  assert.equal(h.selection.selected, "remote"); assert.equal(h.selection.metadata().default, "remote");
+  assert.deepEqual(await disk(), { ...configured, transcription: { ...configured.transcription, order: ["remote", "openai"] } });
+  assert.deepEqual(h.settings[0]!.transcription.order, ["openai", "remote"]);
+  assert.equal(h.signals[0]!.aborted, false); assert.equal(h.ui.getEditorText(), "synthetic draft");
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0); assert.equal(h.targets.length, 0);
+  await h.command("cancel"); await h.controller.settled();
+});
+
+test("profile grammar rejects obsolete/cross-domain forms and malformed arguments without mutation", async () => {
+  const { h, original, disk } = await sourceHarness();
+  const generation = h.selection.generation;
+  for (const args of ["transcription source", "transcription source openai", "t s", "t s openai --save",
+    "recorder profile openai", "r p openai", "t profile openai", "transcription p openai",
+    "transcription profile --save", "t p --save", "t p openai unexpected", "t p openai --save --save",
+    "transcription profile openai --save extra", "transcription profile missing", "source fixture", "d s", "dictation"]) {
+    await h.command(args);
+    assert.equal(h.categories.at(-1), "error", args);
+    assert.equal(h.selection.selected, "openai"); assert.equal(h.selection.generation, generation);
+    assert.deepEqual(await disk(), original);
+  }
+  assert.equal(h.counts().captures, 0); assert.equal(h.targets.length, 0); assert.equal(h.promptCalls.length, 0);
+  assert.equal(h.main.signal.aborted, false);
+});
+
+for (const first of ["fixture/first", "$current"]) test(`help previews only first correction selector: ${first}`, async () => {
+  const h = harness({ nativeNotifications: true, sources: async () => { throw new Error("help must not query audio"); } });
+  h.config.correction.order = [first, "fixture/fallback"];
+  h.setModel({ provider: "fixture", id: "main" } as ExtensionContext["model"]);
+  if (first !== "$current") Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("unauthorized main-model access"); } });
+  h.ctx.modelRegistry = { find: () => { throw new Error("help must not probe models"); } } as unknown as ModelRegistry;
+  await h.start(); await h.command("help");
+  const text = h.notices.at(-1)!;
+  const preview = text.split("\n").find(line => line.trimStart().startsWith("Correction models:"));
+  assert.equal(preview, `  Correction models: ${first === "$current" ? "fixture/main" : first}`);
+  assert.doesNotMatch(preview!, /→|fallback/);
+  assert.match(text, /next order: .* → fixture\/fallback/);
+  assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
+  assert.equal(h.ctx.sessionManager.getEntries().length, 0); assert.equal(h.promptCalls.length, 0);
+});
+
+test("help distinguishes missing current identity from unavailable configuration and sanitizes model labels", async () => {
+  const h = harness(); h.config.correction.order = ["$current"];
+  await h.start(); await h.command("help");
+  assert.match(h.notices.at(-1)!, /Correction models: \$current \(unavailable\)/);
+  h.setModel({ provider: "fixture\n", id: `model\x1b\x07\u202e${"x".repeat(100)}` } as ExtensionContext["model"]);
+  await h.command("help");
+  const line = h.notices.at(-1)!.split("\n").find(line => line.includes("Correction models:"))!;
+  assert.equal(line, `  Correction models: fixture/model${"x".repeat(51)}`);
+  h.selection.reset(); await h.command("help");
+  assert.match(h.notices.at(-1)!, /Draft correction: configuration unavailable/);
+  assert.doesNotMatch(h.notices.at(-1)!, /none is configured/);
+});
+
+test("help includes separate start/stop and multiple active keys, and refreshes theme per request", async () => {
+  const h = harness({ nativeNotifications: true });
+  h.setConfig(parseConfig({ keybindings: { "dictation.toggle": [], "dictation.start": ["f9", "shift+f9"], "dictation.stop": "f10" } }));
+  await h.start(); await h.command("help");
+  assert.match(h.notices.at(-1)!, /F9 \/ Shift\+F9\s+Start recording \(default: unbound\)/);
+  assert.match(h.notices.at(-1)!, /F10\s+Stop and transcribe \(default: unbound\)/);
+  const before = h.styledNotices.at(-1)!;
+  initTheme("light", false); await h.command("help");
+  assert.notEqual(h.styledNotices.at(-1), before);
+  const prefix = h.ui.theme.style("Controls:", { fg: "text", bold: true }).split("Controls:")[0]!;
+  assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}Controls:`));
+  for (const width of [32, 40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
+});
+
 test("profile tools expose only bounded metadata and never audio/editor capabilities", async () => {
   const h = harness({ streaming: true }); await h.start(); h.ui.setEditorText("PRIVATE_SYNTHETIC_DRAFT");
   const result = await h.tools.get("oaistt_profiles").execute("test", {}, new AbortController().signal, undefined, h.ctx);
@@ -476,7 +562,7 @@ for (const newer of ["none", "choice", "reselect", "reload", "cancel"] as const)
   } });
   h.setConfig(profilesConfig()); await h.start(); h.f8(); await nextTask(); h.f8(); await nextTask();
   assert.equal(attempts, 2); assert.equal(h.notices.filter(n => n.includes("trying remote")).length, 1);
-  if (newer === "choice" || newer === "reselect") await h.command("t s local");
+  if (newer === "choice" || newer === "reselect") await h.command("t p local");
   if (newer === "reload") await h.command("rl");
   if (newer === "cancel") h.f12();
   held.resolve("synthetic"); await h.controller.settled();
@@ -530,8 +616,8 @@ test("new temporary/reselected choice wins while an earlier explicit save is hel
   const wait = deferred<void>(); let savedName: string | undefined; let disk = profilesConfig();
   const h = harness({ store: { load: async () => disk, setSource: () => {}, saveSource: async () => {},
     saveProfile: async name => { savedName = name; await wait.promise; disk = structuredClone(disk); disk.transcription.order = [name, ...disk.transcription.order.filter(n => n !== name)]; } } });
-  await h.start(); const saving = h.command("t s remote --save"); await nextTask();
-  await h.command("t s local"); wait.resolve(); await saving;
+  await h.start(); const saving = h.command("t p remote --save"); await nextTask();
+  await h.command("t p local"); wait.resolve(); await saving;
   assert.equal(savedName, "remote"); assert.equal(h.selection.selected, "local"); assert.equal(h.selection.metadata().default, "remote");
   assert.ok(h.notices.some(n => n.includes("next: local")));
 });
@@ -549,17 +635,36 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     h.notices.length = 0; await h.command(args);
     const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.match(rendered, /dictation toggle/); assert.match(rendered, /recorder sources/);
-    assert.match(rendered, /transcription source NAME/); assert.match(rendered, /Defaults/);
+    assert.match(rendered, /transcription profile NAME/); assert.match(rendered, /Controls:/);
     assert.match(rendered, /Active keys/); assert.match(rendered, /oaistt v0\.2\.0: idle/);
     assert.equal(h.notices.length, 1);
     const text = h.notices[0]!;
-    assert.ok(text.includes("oaistt command help (with abbreviations in parenthesis)"));
-    assert.ok(text.includes("Draft correction (default F7) needs a configured correction model."));
+    assert.ok(text.startsWith("oaistt — speech to text and draft correction\n\nDictate into Pi’s prompt draft"));
     assert.ok(text.includes("oaistt never submits a prompt on its own."));
-    assert.ok(text.includes("Settings changes: /oaistt reload applies them to new dictation or correction,"));
-    assert.ok(text.includes("without interrupting dictation or correction already in progress."));
-    assert.ok(text.includes("Key or extension code changes require Pi /reload, which cancels any\ndictation or correction in progress."));
-    assert.doesNotMatch(text, /short forms also follow|not audio|Escape remains|Settings-only reload does not/);
+    assert.ok(text.includes("Draft correction needs a correction model; none is configured."));
+    const sections = ["Controls:", "Abbreviations appear in parentheses:", "Dictation:", "Transcription:",
+      "Capture device:", "Settings and help:", "Notes:", "oaistt v0.2.0:"];
+    const positions = sections.map(section => text.indexOf(section));
+    assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
+    assert.match(text, /\(d t\) means \/oaistt d t/);
+    assert.match(text, /transcription profile NAME \[--save\] \(t p\)/);
+    assert.ok(text.includes("Settings reload leaves active dictation/correction unchanged."));
+    assert.ok(text.includes("Key or extension-code changes require Pi /reload, which cancels\n  dictation or correction in progress."));
+    assert.equal(text.split("add --save").length - 1, 1);
+    assert.ok(text.indexOf("add --save") > text.indexOf("Notes:"));
+    assert.doesNotMatch(text, /main agent|transcription source|\(t s\)|short forms also follow|not audio|Escape remains/);
+    assert.match(text, /F8\s+Start or stop dictation/);
+    assert.match(text, /F7\s+Correct the current draft/);
+    assert.match(text, /F12\s+Cancel oaistt/);
+    const styled = h.styledNotices.at(-1)!;
+    const styledHelp = styled.slice(0, styled.lastIndexOf("\n", styled.indexOf("oaistt v0.2.0:")));
+    assert.ok(styledHelp.startsWith(h.ui.theme.getFgAnsi("muted")));
+    assert.ok(!styledHelp.includes(h.ui.theme.getFgAnsi("accent")));
+    for (const highlight of ["Controls:", "Dictation:", "Notes:", "F8", "/oaistt transcription profile NAME [--save] (t p)"]) {
+      const prefix = h.ui.theme.style(highlight, { fg: "text", bold: true }).split(highlight)[0]!;
+      assert.ok(styledHelp.includes(`${prefix}${highlight}`));
+      assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${prefix}${highlight}`));
+    }
     assert.doesNotMatch(rendered, /PRIVATE_SYNTHETIC_DRAFT|https:|endpoint|OPENAI_API_KEY/);
     for (const width of [40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
   }
@@ -578,9 +683,9 @@ test("help shows actual disabled/rebound controls and pending keys in one native
   await h.start(); h.notices.length = 0; await h.command("help");
   const help = h.notices[0]!;
   assert.equal(h.notices.length, 1);
-  assert.match(help, /dictation.toggle.*default: f8.*active: f9/);
-  assert.match(help, /editor.correct.*default: f7.*active: unbound/);
-  assert.match(help, /operation.cancel.*default: f12.*active: unbound/);
+  assert.match(help, /F9\s+Start or stop dictation \(default: F8\)/);
+  assert.match(help, /unbound\s+Correct the current draft \(default: F7\)/);
+  assert.match(help, /unbound\s+Cancel oaistt \(default: F12\)/);
   h.setConfig(parseConfig({ keybindings: { "dictation.toggle": "f10" } }));
   await h.command("reload");
   for (const args of ["help", "", "status", "s"]) {
@@ -687,7 +792,7 @@ for (const fullscreen of [false, true]) test(`status has ordered styled labels, 
     assert.doesNotMatch(text, /^Fallback:/m);
     assert.match(text, /Capture device:\s+server default source/);
     const keys = ["Transcription", "Correction", "Capture device", "Active keys"];
-    const rows = text.split("\n").filter(line => keys.some(key => line.startsWith(`${key}:`)));
+    const rows = text.slice(text.indexOf("oaistt v0.2.0:")).split("\n").filter(line => keys.some(key => line.startsWith(`${key}:`)));
     assert.deepEqual(rows.map(line => line.split(":")[0]), keys);
     assert.ok(rows.every(line => line.match(/^[^:]+:\s+/u)![0].length === 16));
     assert.doesNotMatch(text, /EXCLUDED_SYNTHETIC_DRAFT|https?:|OPENAI_API_KEY|Active STT|selectors/);

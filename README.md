@@ -131,8 +131,9 @@ Equivalent dictation and cancellation commands are:
 ```
 
 Bare **`/oaistt`** shows concise help and status; it does not start recording.
-Use **`/oaistt help`** for commands, aliases, default/active shortcuts, and
-pending key changes. **`/oaistt status`** shows the current operation,
+Use **`/oaistt help`** for an introduction, sectioned commands, aliases, active
+shortcuts (with differing defaults), correction setup, and pending key changes.
+**`/oaistt status`** shows the current operation,
 transcription selection, correction model order, transcription fallback policy,
 and capture device without the command list. The header includes the installed
 package version and, for Git checkouts, its seven-character commit hash.
@@ -346,8 +347,8 @@ Only names listed in `order` are active. List or select them with:
 
 ```text
 /oaistt transcription list
-/oaistt transcription source local
-/oaistt transcription source local --save
+/oaistt transcription profile local
+/oaistt transcription profile local --save
 ```
 
 Selection without `--save` lasts for the extension runtime. Saving moves

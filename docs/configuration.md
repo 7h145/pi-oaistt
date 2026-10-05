@@ -274,6 +274,16 @@ properties. The default label describes server-default selection, not a probe of
 the resolved physical device. Active work retains its frozen settings and model
 identity even when selections change.
 
+Full help introduces dictation/draft correction, then presents active controls,
+dictation commands, transcription profiles, capture device, settings/help, and
+notes. Abbreviation notation is explained after controls, before the commands;
+notes explain temporary selections and `--save` once. Headings, commands and keys
+use bold `text` highlights over a muted base, without boxes or section colors.
+Controls include differing defaults and any bound start/stop keys. The compact
+correction line names only the first configured model (resolving `$current` if
+listed first), or explains missing configuration. It is not an availability check;
+the appended status retains the complete next-operation order and pending keys.
+
 Each response is one UI-only notification so Pi's consecutive-info coalescing
 cannot hide help or pending-key details. Only these long forms/exact aliases
 are supported:
@@ -287,10 +297,11 @@ are supported:
 | `recorder sources` | `r l` |
 | `recorder source NAME [--save]` | `r s NAME [--save]` |
 | `transcription list` | `t l` |
-| `transcription source NAME [--save]` | `t s NAME [--save]` |
+| `transcription profile NAME [--save]` | `t p NAME [--save]` |
 | `reload` | `rl` |
 
-No-name source reports current selection/usage, never a dialog or mutation.
+No-name `recorder source` / `transcription profile` reports current selection/usage,
+never a dialog or mutation.
 `recorder source default [--save]` follows server default, persisting null.
 Only the commands and aliases listed above are accepted. Saving a selection
 requires a name; draft correction is invoked with F7, not a typed command.

@@ -138,6 +138,13 @@ informational notices cannot hide command help or pending bindings. Profile tool
 expose bounded selection metadata, not audio, drafts, endpoints or credentials;
 non-TUI metadata does not enable recording or editor access.
 
+Help leads with an introduction/active controls, then grouped commands and shared
+notes, using muted text and bold `text` highlights. Its first-model preview does
+not probe availability; appended status retains the full order/pending keys.
+Owner-approved `transcription profile NAME [--save]` / `t p` supersedes the handoff
+spelling, without compatibility aliases or changed safety/selection behavior.
+Recorder `sources` / `source` retain PulseAudio terminology.
+
 Startup emits one orientation line, not a readiness claim: a themed oaistt title,
 speech-to-text description, active shortcut hints and help link separated by dots.
 Title/keys use bold `text` highlights over a muted base, and Pi owns wrapping. Toggle takes precedence; without it,
@@ -156,34 +163,28 @@ Owned dictation uses its frozen source even after settings change or fail to rel
 idle/manual status uses current settings. No audio query is made. Missing state
 reports unavailable, and theme styling is computed on request.
 
-Installed identity is read once at interactive session start, independently of
-settings/profile initialization. Version comes from the resolved module's own
-package manifest. Only a Git directory/worktree gitfile at that package root
-permits an optional, bounded read-only HEAD query; no parent search or inherited
-Git directory/worktree overrides, trace output or global Git configuration. Git
-failure retains version-only status; metadata failure does not block controls.
-Neither import/factory, non-TUI startup nor subsequent status calls probe identity.
-The hash identifies checkout HEAD, not a clean-worktree or immutable-build claim.
+Identity is cached at interactive session start from the package manifest and an
+optional bounded read-only package-root Git HEAD query. No parent lookup, ambient
+Git overrides/config or trace output; import/factory, non-TUI startup and later
+status calls do not probe. Git failure retains version-only status; missing
+metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 450 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
-22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
-verified unchanged tested-source/documentation hashes before commit.
+**Latest full baseline: 457 synthetic tests and typechecking pass** against Pi
+0.99.2 on Node 22.19.0 and 24.21.0, with isolated Pi settings. Help tests cover
+ordered sections/hints, neutral styling, first-model/missing-config previews,
+regular/fullscreen wrapping, actual/pending keys and read-only active ownership.
+Both profile command forms cover temporary/save/no-name behavior, rejected syntax,
+frozen settings and newer-choice races. No new live test or host Pi 1.0.2
+requalification is claimed.
 
-The latest palette-only adjustment passes typechecking and 29 focused native
-startup/loader tests on Node 26.10.0. No new full matrix or live check is claimed.
-
-The full matrix includes approved help wording and installed-identity coverage:
-version-only npm/parent-repository cases, real local Git/worktree fixtures,
-symlinked paths, SHA-1/SHA-256 formatting, malformed/missing metadata, ambient
-repository overrides, an unresponsive Git client, single-runtime caching,
-non-TUI non-probing and real Pi
-symlink discovery/jiti rendering. Startup-tagline cases cover default/rebound,
-toggle precedence, complete/incomplete pairs, independent omissions, multiple
-bindings/punctuation, native/internal conflicts and all-disabled controls in
-native regular/fullscreen at 32/40/80/120 columns. No new live terminal/provider
-test is claimed.
+Installed-identity tests cover optional/malformed metadata, package-root-only Git
+and worktrees, SHA-1/SHA-256, symlinks, ambient overrides, bounded hung clients,
+runtime caching and non-TUI non-probing. Real Pi symlink discovery/jiti is tested.
+Startup cases cover default/rebound/multiple keys, toggle/pair precedence,
+incomplete/unbound/conflicting controls and all-disabled bindings, in native
+regular/fullscreen at 32/40/80/120 columns.
 
 Successful recorder fixtures use the production-sized three-second grace budget;
 deliberate hung-stop fixtures retain a short deadline. Production timeouts are

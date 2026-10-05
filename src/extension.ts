@@ -25,34 +25,10 @@ import { transcribe, prepareAudio, transcriptionChain, TranscriptionFailure } fr
 
 export const STATUS_KEY = "footer-compositor:right:80:pi-oaistt";
 export const WIDGET_KEY = "pi-oaistt";
-const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/source NAME [--save] | reload. Key changes require full Pi /reload.";
-const COMMAND_HELP = [
-  "oaistt command help (with abbreviations in parenthesis)",
-  "  /oaistt                              Concise help and status",
-  "  /oaistt help (h)                     Commands, controls and status",
-  "  /oaistt status (s)                   Operation and next selections",
-  "  /oaistt dictation toggle (d t)       Start, or stop/use recording",
-  "  /oaistt dictation start (d start)    Start only if oaistt is idle",
-  "  /oaistt dictation stop (d stop)      Gracefully stop/use recording",
-  "  /oaistt cancel (x)                   Cancel oaistt, not the main agent",
-  "  /oaistt recorder sources (r l)       List recording sources; no capture",
-  "  /oaistt recorder source NAME [--save] (r s)",
-  "    Select an input for next recording; default follows server default",
-  "  /oaistt transcription list (t l)     List configured profiles/policy",
-  "  /oaistt transcription source NAME [--save] (t s)",
-  "    Select an active profile for next recording; --save promotes its order",
-  "  /oaistt reload (rl)                  Reload settings for new dictation/correction",
-  "",
-  "Without NAME, source commands report selection/usage; they do not change it.",
-  "Selections are temporary unless --save is given; host audio settings stay unchanged.",
-  "Draft correction (default F7) needs a configured correction model.",
-  "oaistt never submits a prompt on its own.",
-  "",
-  "Settings changes: /oaistt reload applies them to new dictation or correction,",
-  "without interrupting dictation or correction already in progress.",
-  "Key or extension code changes require Pi /reload, which cancels any",
-  "dictation or correction in progress.",
-].join("\n");
+const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/profile NAME [--save] | reload. Key changes require full Pi /reload.";
+const displayKeys = (keys: string[]): string => keys.map(key => key.split("+").map(part =>
+  /^f\d+$/u.test(part) || part.length <= 1 ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1),
+).join("+")).join(" / ") || "unbound";
 type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile">;
 export interface Dependencies {
   identity: () => Promise<InstallationIdentity>;
@@ -184,9 +160,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     const hint = (action: Action, text: string): string | undefined => {
       const keys = activeBindings[action];
       if (!keys.length) return undefined;
-      const display = keys.map(key => key.split("+").map(part => /^f\d+$/u.test(part) || part.length <= 1
-        ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1)).join("+")).join(" / ");
-      return `${ctx.ui.theme.style(display, { fg: "text", bold: true })} ${text}`;
+      return `${ctx.ui.theme.style(displayKeys(keys), { fg: "text", bold: true })} ${text}`;
     };
     const dictation = activeBindings["dictation.toggle"].length ? [hint("dictation.toggle", "to dictate")]
       : activeBindings["dictation.start"].length && activeBindings["dictation.stop"].length
@@ -330,14 +304,66 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
   function status(ctx: ExtensionContext, lead?: string): void {
     notice(ctx, [lead, statusText(ctx)].filter(Boolean).join("\n"));
   }
+  function commandHelp(ctx: ExtensionContext): string {
+    const strong = (text: string) => ctx.ui.theme.style(text, { fg: "text", bold: true });
+    const command = (syntax: string, description?: string) => `  ${strong(syntax)}${description
+      ? `${" ".repeat(Math.max(2, 43 - syntax.length))}${description}` : ""}`;
+    const descriptions: Record<Action, string> = {
+      "dictation.toggle": "Start or stop dictation", "editor.correct": "Correct the current draft",
+      "operation.cancel": "Cancel oaistt", "dictation.start": "Start recording", "dictation.stop": "Stop and transcribe",
+    };
+    const controls = ACTIONS.filter(action => DEFAULT_BINDINGS[action].length || activeBindings[action].length).map(action => {
+      const keys = displayKeys(activeBindings[action]);
+      const defaults = JSON.stringify(activeBindings[action]) === JSON.stringify(DEFAULT_BINDINGS[action])
+        ? "" : ` (default: ${displayKeys(DEFAULT_BINDINGS[action])})`;
+      return `  ${strong(keys)}${" ".repeat(Math.max(2, 7 - keys.length))}${descriptions[action]}${defaults}`;
+    });
+    const config = selection.config, first = config?.correction.order[0];
+    // The compact preview names only the first configured selector, not a proven
+    // usable model. Full status below retains the complete next-operation order.
+    const model = first === "$current" ? ctx.model : undefined;
+    const correction = !config ? "Draft correction: configuration unavailable." : !first
+      ? "Draft correction needs a correction model; none is configured."
+      : `Correction models: ${first === "$current" ? model ? safeLabel(`${model.provider}/${model.id}`)
+        : "$current (unavailable)" : safeLabel(first)}`;
+    return [
+      strong("oaistt — speech to text and draft correction"), "",
+      "Dictate into Pi’s prompt draft, or correct text already there.",
+      "Review the result before sending; oaistt never submits a prompt on its own.", "",
+      strong("Controls:"), ...controls, "", `  ${correction}`, "",
+      "Abbreviations appear in parentheses: (d t) means /oaistt d t.", "",
+      strong("Dictation:"),
+      command("/oaistt dictation toggle (d t)", "Start, or stop and transcribe"),
+      command("/oaistt dictation start (d start)", "Start recording"),
+      command("/oaistt dictation stop (d stop)", "Stop and transcribe"),
+      command("/oaistt cancel (x)", "Cancel oaistt"), "",
+      strong("Transcription:"), "  Choose which configured service transcribes your speech.", "",
+      command("/oaistt transcription list (t l)", "Show profiles and fallback policy"),
+      command("/oaistt transcription profile NAME [--save] (t p)"),
+      "    Select a profile for subsequent dictation.", "",
+      strong("Capture device:"), "  Choose the microphone or other recording input.", "",
+      command("/oaistt recorder sources (r l)", "List available inputs"),
+      command("/oaistt recorder source NAME [--save] (r s)"),
+      "    Select an input. Use NAME “default” to follow the server default.", "",
+      strong("Settings and help:"),
+      command("/oaistt", "Concise help and status"),
+      command("/oaistt status (s)", "Show current state and selections"),
+      command("/oaistt help (h)", "Show this help"),
+      command("/oaistt reload (rl)", "Reload settings for subsequent work"), "",
+      strong("Notes:"),
+      "  Without NAME, source/profile commands report selection/usage without changing it.",
+      "  Device/profile selections are temporary; add --save to keep the",
+      "  choice in configuration. Host audio settings stay unchanged.", "",
+      "  Settings reload leaves active dictation/correction unchanged.",
+      "  Key or extension-code changes require Pi /reload, which cancels",
+      "  dictation or correction in progress.",
+    ].join("\n");
+  }
   function help(ctx: ExtensionContext, concise: boolean): void {
-    const controls = ["Controls (Defaults / Active keys):", ...ACTIONS.map(action =>
-      `  ${action}: default: ${DEFAULT_BINDINGS[action].join(",") || "unbound"}; active: ${activeBindings[action].join(",") || "unbound"}`,
-    )].join("\n");
     const summary = "Defaults: F8 dictation; F7 correct draft; F12 cancel (never submits). /oaistt help lists commands and controls.";
     // Pi coalesces consecutive info notices. Send help and state atomically so
     // the final status/pending-key notice cannot replace the command help.
-    notice(ctx, [concise ? summary : `${COMMAND_HELP}\n\n${controls}`, statusText(ctx)].join("\n\n"));
+    notice(ctx, [concise ? summary : commandHelp(ctx), statusText(ctx)].join("\n\n"));
   }
   async function command(args: string, ctx: ExtensionContext): Promise<void> {
     const current = validScope(ctx); if (!current) return;
@@ -364,10 +390,11 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       }
       return;
     }
-    const group = p[0] === "r" && p[1] === "s" ? "recorder" : p[0] === "t" && p[1] === "s" ? "transcription" : p[1] === "source" ? p[0] : undefined;
+    const group = (p[0] === "recorder" && p[1] === "source" || p[0] === "r" && p[1] === "s") ? "recorder"
+      : (p[0] === "transcription" && p[1] === "profile" || p[0] === "t" && p[1] === "p") ? "transcription" : undefined;
     if (!["recorder", "transcription"].includes(group ?? "") || p.length > 4 || p.length === 4 && p[3] !== "--save" || p[2] === "--save") { error(ctx, USAGE); return; }
     if (p.length === 2) {
-      notice(ctx, group === "recorder" ? `Recording source: ${selection.config?.recorder.source ? safeLabel(selection.config.recorder.source) : "server default"}. Use recorder source NAME [--save].` : `Next transcription profile: ${selection.selected ?? "unavailable"}. Use transcription source NAME [--save].`); return;
+      notice(ctx, group === "recorder" ? `Recording source: ${selection.config?.recorder.source ? safeLabel(selection.config.recorder.source) : "server default"}. Use recorder source NAME [--save].` : `Next transcription profile: ${selection.selected ?? "unavailable"}. Use transcription profile NAME [--save].`); return;
     }
     if (p.length < 3) { error(ctx, USAGE); return; }
     const save = p[3] === "--save";
