@@ -234,8 +234,10 @@ The owner reports roughly **100 capture/correction runs** and accepts:
 
 - **V2 microphone capture:** works as expected, including Bluetooth; failures
   are helpful.
-- **V4 correction/model quality:** overall workflow is acceptable. The current
-  contextual-spelling/voice-preservation prompt still needs live quality checks.
+- **V4 correction/model quality:** overall workflow is acceptable. With the current
+  prompt, the owner reports correct project spelling despite deliberately sloppy
+  naming. This is an end-to-end smoke check, not attribution to STT or correction;
+  false contextual matches and deliberate repetition/emphasis/voice remain untested.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
   workflow. Help/status UX is owner-confirmed. A live dictation smoke test confirms
   the clean footer, above-editor line, guidance and working cancellation.
@@ -249,7 +251,7 @@ recordings or private configuration are retained.
 | V1 | Installation/container setup | Fresh-install/recovery cases remain open |
 | V2 | Microphone capture | Owner-accepted, including Bluetooth |
 | V3 | STT/auth/fallback | Basic flow exercised; routing/auth/fallback cases remain open |
-| V4 | Correction/model quality | Overall workflow owner-accepted; current prompt quality unqualified |
+| V4 | Correction/model quality | Workflow accepted; current project-name smoke passes; false matches/voice checks open |
 | V5 | F7/draft preservation | Clipboard/images, undo and edit-cancellation cases remain open |
 | V6 | Busy/lifecycle paths | Live busy/compaction/navigation/reload cases remain open |
 | V7 | Keys/presentation | Owner-accepted for Neovim/tmux; widget-only layout, guidance and cancel smoke-tested |
