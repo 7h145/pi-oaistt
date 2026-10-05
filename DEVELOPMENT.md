@@ -191,9 +191,10 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
-72-column bullet wrapping: one-space heading indent, bullets under its o and
-four-space continuations. Native tests verify breaks/alignment on wide terminals
-and narrower layout width budgets.
+72-column bullet wrapping: generated heading/bullet/continuation indents are
+0/1/3 spaces. Pi adds outer padding; Notes aligns with the other headings, bullets
+sit under its o, and continuations align with bullet text. Native tests compare
+rendered heading/row indentation, explicit breaks and narrower layout budgets.
 Recording covers 14 binding scenarios in regular/fullscreen, segmented colors,
 elapsed/theme refresh, pending-key stability and processing/clearing. Processing guidance covers six
 cancel-binding scenarios across transcription and automatic/manual correction in
