@@ -242,7 +242,7 @@ Bare `/oaistt` shows concise help/status. `/oaistt help` lists commands and
 exact aliases, default/active controls, pending bindings and safe usage.
 
 The single-line startup tagline uses active shortcuts after binding-conflict checks,
-with highlighted keys and `·` separators; Pi handles wrapping. A bound toggle
+with a muted base, bold `text`-colored highlights and `·` separators; Pi handles wrapping. A bound toggle
 shows “to dictate”; without it, both start and stop must be bound to show their
 hints. An incomplete pair omits dictation. Unbound correction/cancel hints are
 omitted independently. `see /oaistt help` always remains. This is orientation,

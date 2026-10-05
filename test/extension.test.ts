@@ -863,10 +863,11 @@ for (const fullscreen of [false, true]) for (const row of startupCases) {
     const rendered = h.mode.chatContainer.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.match(rendered, /oaistt — speech to text/); assert.match(rendered, /see\s+\/oaistt\s+help/);
     for (const width of [32, 40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
-    const prefix = h.ui.theme.style("oaistt", { fg: "accent", bold: true }).split("oaistt")[0]!;
+    const prefix = h.ui.theme.style("oaistt", { fg: "text", bold: true }).split("oaistt")[0]!;
     assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}oaistt`));
+    assert.ok(h.styledNotices.at(-1)!.startsWith(h.ui.theme.getFgAnsi("muted")));
     if (row.name === "defaults") {
-      const keyPrefix = h.ui.theme.style("F8", { fg: "accent", bold: true }).split("F8")[0]!;
+      const keyPrefix = h.ui.theme.style("F8", { fg: "text", bold: true }).split("F8")[0]!;
       assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${keyPrefix}F8`));
     }
     assert.equal(h.counts().captures, 0); assert.equal(h.targets.length, 0); assert.equal(h.promptCalls.length, 0);

@@ -186,13 +186,13 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       if (!keys.length) return undefined;
       const display = keys.map(key => key.split("+").map(part => /^f\d+$/u.test(part) || part.length <= 1
         ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1)).join("+")).join(" / ");
-      return `${ctx.ui.theme.style(display, { fg: "accent", bold: true })} ${text}`;
+      return `${ctx.ui.theme.style(display, { fg: "text", bold: true })} ${text}`;
     };
     const dictation = activeBindings["dictation.toggle"].length ? [hint("dictation.toggle", "to dictate")]
       : activeBindings["dictation.start"].length && activeBindings["dictation.stop"].length
         ? [hint("dictation.start", "to start dictation"), hint("dictation.stop", "to stop dictation")] : [];
     return [
-      `${ctx.ui.theme.style("oaistt", { fg: "accent", bold: true })} — speech to text`,
+      `${ctx.ui.theme.style("oaistt", { fg: "text", bold: true })} — speech to text`,
       ...dictation, hint("editor.correct", "to correct"), hint("operation.cancel", "to cancel"), "see /oaistt help",
     ].filter(Boolean).join(" · ");
   }

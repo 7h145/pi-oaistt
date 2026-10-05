@@ -140,7 +140,7 @@ non-TUI metadata does not enable recording or editor access.
 
 Startup emits one orientation line, not a readiness claim: a themed oaistt title,
 speech-to-text description, active shortcut hints and help link separated by dots.
-Keys are highlighted, and Pi owns wrapping. Toggle takes precedence; without it,
+Title/keys use bold `text` highlights over a muted base, and Pi owns wrapping. Toggle takes precedence; without it,
 both active start/stop bindings are required to advertise dictation. Incomplete
 pairs and unbound correction/cancel hints are omitted after conflict resolution.
 All-disabled bindings retain title/help. No extra process or health check is added.
@@ -170,6 +170,9 @@ The hash identifies checkout HEAD, not a clean-worktree or immutable-build claim
 **Latest full baseline: 450 synthetic tests and typechecking pass** against Pi 0.99.2 on Node
 22.19.0 and 24.21.0. The full local matrix used isolated Pi settings and
 verified unchanged tested-source/documentation hashes before commit.
+
+The latest palette-only adjustment passes typechecking and 29 focused native
+startup/loader tests on Node 26.10.0. No new full matrix or live check is claimed.
 
 The full matrix includes approved help wording and installed-identity coverage:
 version-only npm/parent-repository cases, real local Git/worktree fixtures,
