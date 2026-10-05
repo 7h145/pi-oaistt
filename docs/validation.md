@@ -110,6 +110,11 @@ to make tests pass. Normal exhaustion is raw/unchanged; cancellation is no resul
 - Default/rebound/disabled/multiple F7/F8/F12 keys, exact command aliases, native key
   conflicts and other-extension Pi-priority warnings. Settings-only key changes stay
   pending until full reload; commands remain recovery controls.
+- During REC, check brand/stop/cancel hints: active toggle wins, otherwise active
+  stop alone suffices; cancel is independent, start/correction are omitted.
+  All-unbound recording shows only REC/timer/brand, not invented default keys.
+  Only REC/timer is red; theme changes refresh the neutral guidance. Pending keys
+  must not change these hints, and leaving recording/ownership must clear them.
 - Check physical terminal/tmux interception, narrow regular/fullscreen layouts,
   theme changes, stock/compositor/replacement footers and widget visibility.
   Warnings/notices/status must not duplicate, outlive ownership or become context.

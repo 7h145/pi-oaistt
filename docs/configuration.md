@@ -249,6 +249,17 @@ hints. An incomplete pair omits dictation. Unbound correction/cancel hints are
 omitted independently. `see /oaistt help` always remains. This is orientation,
 not a microphone/provider readiness check.
 
+During recording, one logical feedback line (also mirrored to the footer status)
+shows `● REC 00:05 · oaistt · F8 stop · F12 cancel` with active, conflict-filtered
+bindings. Only the REC indicator/timer is red; separators/words are muted and
+brand/keys use bold `text`. Toggle takes precedence, otherwise use an explicit
+stop key; unlike startup, no start/stop pair is required once recording is active.
+Start/correction keys are never shown here. Cancellation is independent. Unbound
+hints are omitted; all-unbound recording retains `● REC 00:05 · oaistt`, with
+slash commands still available. Pending configuration never changes the advertised
+active keys before full reload. Pi owns narrow-terminal wrapping/clipping; the
+existing elapsed/theme refresh and ownership-scoped clearing are unchanged.
+
 The status header identifies the loaded installation, for example
 `oaistt v0.2.1 (1234abc): idle. Configuration loaded successfully.` Version comes
 from its own `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,

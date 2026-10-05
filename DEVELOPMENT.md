@@ -145,12 +145,14 @@ Owner-approved `transcription profile NAME [--save]` / `t p` supersedes the hand
 spelling, without compatibility aliases or changed safety/selection behavior.
 Recorder `sources` / `source` retain PulseAudio terminology.
 
-Startup emits one orientation line, not a readiness claim: a themed oaistt title,
-speech-to-text description, active shortcut hints and help link separated by dots.
-Title/keys use bold `text` highlights over a muted base, and Pi owns wrapping. Toggle takes precedence; without it,
-both active start/stop bindings are required to advertise dictation. Incomplete
-pairs and unbound correction/cancel hints are omitted after conflict resolution.
-All-disabled bindings retain title/help. No extra process or health check is added.
+Startup is a muted orientation line with bold `text` title/keys and dot separators,
+not readiness. Active toggle wins; otherwise both start/stop keys are required.
+Recording shares hint formatting but needs only a stop key when toggle is absent:
+`● REC 00:05 · oaistt · F8 stop · F12 cancel`. Only REC/timer is red; guidance is
+muted with bold neutral brand/keys. Cancellation is independent; unbound/conflicting
+hints are omitted, all-unbound keeps REC/brand, and pending keys cannot change hints.
+Pi owns wrapping/clipping. Existing timers, theme refresh and owned clearing remain;
+no process/probe is added. Start/correction hints never appear during recording.
 
 Status shares the muted/neutral-bold palette and uses ordered profile/model/key
 bullet lists. Only the first candidate is bold, not a proven usable/live selection.
@@ -172,20 +174,20 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 463 synthetic tests and typechecking pass** against Pi
-0.99.2 on Node 22.19.0 and 24.21.0, with isolated Pi settings. Help tests cover
-help/status separation, root/status identity, effective STT order/bold starts,
-neutral styling, missing state, native wrapping, pending keys and active ownership.
-Both profile command forms cover temporary/save/no-name behavior, rejected syntax,
-frozen settings and newer-choice races. No new live test or host Pi 1.0.2
+**Latest full baseline: 492 synthetic tests and typechecking pass** against Pi
+0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
+separate help/root-status identity, effective STT order/bold starts, neutral lists,
+missing state, pending keys and read-only active ownership. Recording covers 14
+binding scenarios in regular/fullscreen, segmented colors, elapsed/theme refresh,
+pending-key stability and processing/clearing. No new live test or host Pi 1.0.2
 requalification is claimed.
 
-Installed-identity tests cover optional/malformed metadata, package-root-only Git
-and worktrees, SHA-1/SHA-256, symlinks, ambient overrides, bounded hung clients,
-runtime caching and non-TUI non-probing. Real Pi symlink discovery/jiti is tested.
-Startup cases cover default/rebound/multiple keys, toggle/pair precedence,
-incomplete/unbound/conflicting controls and all-disabled bindings, in native
-regular/fullscreen at 32/40/80/120 columns.
+Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen
+settings and newer-choice races. Installed identity covers optional/malformed
+metadata, package-root Git/worktrees, symlinks, ambient overrides, bounded hangs,
+caching/non-TUI non-probing and native discovery/jiti. Startup covers rebound,
+multiple/unbound/conflicting keys and toggle/pair precedence. Native layouts cover
+32/40/80/120 columns, with existing feedback cases at 12/20/80.
 
 Successful recorder fixtures use the production-sized three-second grace budget;
 deliberate hung-stop fixtures retain a short deadline. Production timeouts are

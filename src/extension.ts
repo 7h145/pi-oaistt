@@ -29,6 +29,10 @@ const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oai
 const displayKeys = (keys: string[]): string => keys.map(key => key.split("+").map(part =>
   /^f\d+$/u.test(part) || part.length <= 1 ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1),
 ).join("+")).join(" / ") || "unbound";
+function keyHint(ctx: ExtensionContext, bindings: Bindings, action: Action, text: string): string | undefined {
+  const keys = bindings[action];
+  return keys.length ? `${ctx.ui.theme.style(displayKeys(keys), { fg: "text", bold: true })} ${text}` : undefined;
+}
 const CONTROL_ORDER: Action[] = ["dictation.toggle", "editor.correct", "operation.cancel", "dictation.start", "dictation.stop"];
 const CONTROL_DESCRIPTIONS: Record<Action, string> = {
   "dictation.toggle": "Start or stop dictation", "editor.correct": "Correct the current draft",
@@ -50,12 +54,15 @@ class Feedback {
   #clock: () => number;
   #current: () => boolean;
   #checkEditor: () => boolean;
+  #recordingText: (elapsed: string) => string;
   #phase: Phase = "idle";
   #since = 0;
   #lastText?: string;
   #timer?: ReturnType<typeof setInterval>;
-  constructor(ctx: ExtensionContext, clock: () => number, current: () => boolean, checkEditor: () => boolean) {
+  constructor(ctx: ExtensionContext, clock: () => number, current: () => boolean, checkEditor: () => boolean,
+    recordingText: (elapsed: string) => string) {
     this.#ctx = ctx; this.#clock = clock; this.#current = current; this.#checkEditor = checkEditor;
+    this.#recordingText = recordingText;
   }
   phase(phase: Phase): void {
     clearInterval(this.#timer); this.#timer = undefined;
@@ -75,7 +82,7 @@ class Feedback {
     if (this.#phase === "recording") {
       const seconds = Math.max(0, Math.floor((this.#clock() - this.#since) / 1000));
       const elapsed = `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
-      text = this.#ctx.ui.theme.fg("error", `● REC ${elapsed}`);
+      text = this.#recordingText(elapsed);
     } else {
       const label = { starting: "Starting recorder…", stopping: "Stopping…", transcribing: "Transcribing…",
         correcting: "Correcting…", cleaning: "Cleaning up…", idle: "" }[this.#phase];
@@ -162,11 +169,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     }
   }
   function startupText(ctx: ExtensionContext): string {
-    const hint = (action: Action, text: string): string | undefined => {
-      const keys = activeBindings[action];
-      if (!keys.length) return undefined;
-      return `${ctx.ui.theme.style(displayKeys(keys), { fg: "text", bold: true })} ${text}`;
-    };
+    const hint = (action: Action, text: string) => keyHint(ctx, activeBindings, action, text);
     const dictation = activeBindings["dictation.toggle"].length ? [hint("dictation.toggle", "to dictate")]
       : activeBindings["dictation.start"].length && activeBindings["dictation.stop"].length
         ? [hint("dictation.start", "to start dictation"), hint("dictation.stop", "to stop dictation")] : [];
@@ -174,6 +177,14 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       `${ctx.ui.theme.style("oaistt", { fg: "text", bold: true })} — speech to text`,
       ...dictation, hint("editor.correct", "to correct"), hint("operation.cancel", "to cancel"), "see /oaistt help",
     ].filter(Boolean).join(" · ");
+  }
+  function recordingText(ctx: ExtensionContext, elapsed: string): string {
+    // Recording is already active: a stop binding alone suffices, unlike startup.
+    const stop: Action = activeBindings["dictation.toggle"].length ? "dictation.toggle" : "dictation.stop";
+    const hints = [ctx.ui.theme.style("oaistt", { fg: "text", bold: true }),
+      keyHint(ctx, activeBindings, stop, "stop"), keyHint(ctx, activeBindings, "operation.cancel", "cancel")];
+    return ctx.ui.theme.fg("error", `● REC ${elapsed}`)
+      + ctx.ui.theme.fg("muted", ` · ${hints.filter(Boolean).join(" · ")}`);
   }
   pi.on("session_start", async (_event, ctx) => {
     if (scope) await teardown("session changed");
@@ -228,7 +239,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       controller.cancel("editor changed"); feedback.clear();
       if (!resultFinished && !lostEditorNotice) { lostEditorNotice = true; notice(ctx, `${manual ? "Draft correction" : "Dictation"} discarded: editor changed.`); }
       return false;
-    });
+    }, elapsed => recordingText(ctx, elapsed));
     current.feedback = feedback;
     const stillOwned = () => {
       if (delivery.isCurrent()) return true;

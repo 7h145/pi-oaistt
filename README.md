@@ -107,6 +107,11 @@ instead.
 2. Speak, then press **F8** again to stop and transcribe.
 3. Wait for the text to appear in the draft. Review it before submitting.
 
+Recording feedback identifies oaistt and the active stop/cancel keys, for example
+`● REC 00:05 · oaistt · F8 stop · F12 cancel`. Only the REC indicator/timer is red;
+guidance uses the toned-down theme. Rebound keys are reflected, and unbound hints
+are omitted. An active toggle takes precedence over an explicit stop key.
+
 You may keep typing while dictation runs. The result appends to the latest
 draft, not the cursor position, without replacing existing text. Press
 **F12** to discard an active recording or request. Submitting a prompt,

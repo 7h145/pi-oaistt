@@ -1051,3 +1051,77 @@ for (const fullscreen of [false, true]) for (const row of startupCases) {
     assert.equal(h.main.signal.aborted, false); assert.equal(h.ctx.sessionManager.getEntries().length, 0);
   });
 }
+
+const recordingCases = [
+  { name: "defaults", keys: {}, hints: "F8 stop · F12 cancel" },
+  { name: "toggle wins", keys: { "dictation.start": "f9", "dictation.stop": "f10" }, hints: "F8 stop · F12 cancel" },
+  { name: "rebound", keys: { "dictation.toggle": "f9", "operation.cancel": "f11" }, hints: "F9 stop · F11 cancel" },
+  { name: "start/stop pair", keys: { "dictation.toggle": [], "dictation.start": "f9", "dictation.stop": "f10" }, hints: "F10 stop · F12 cancel" },
+  { name: "stop without start", keys: { "dictation.toggle": [], "dictation.stop": "f10" }, hints: "F10 stop · F12 cancel" },
+  { name: "start without stop", keys: { "dictation.toggle": [], "dictation.start": "f9" }, hints: "F12 cancel" },
+  { name: "no cancellation", keys: { "operation.cancel": [] }, hints: "F8 stop" },
+  { name: "all disabled", keys: { "dictation.toggle": [], "dictation.start": [], "dictation.stop": [], "editor.correct": [], "operation.cancel": [] }, hints: "" },
+  { name: "multiple toggles and punctuation", keys: { "dictation.toggle": ["f8", "shift+f8", "+"] }, hints: "F8 / Shift+F8 / + stop · F12 cancel" },
+  { name: "multiple stop keys", keys: { "dictation.toggle": [], "dictation.stop": ["f9", "shift+f9"] }, hints: "F9 / Shift+F9 stop · F12 cancel" },
+  { name: "native toggle conflict", keys: { "dictation.toggle": "f6", "dictation.stop": "f10" }, hints: "F10 stop · F12 cancel", native: { "app.model.select": "f6" } },
+  { name: "native stop conflict", keys: { "dictation.toggle": [], "dictation.start": "f9", "dictation.stop": "f6" }, hints: "F12 cancel", native: { "app.model.select": "f6" } },
+  { name: "native cancel conflict", keys: { "operation.cancel": "f6" }, hints: "F8 stop", native: { "app.model.select": "f6" } },
+  { name: "own toggle/cancel conflict", keys: { "dictation.toggle": "f8", "operation.cancel": "f8", "dictation.stop": "f10" }, hints: "F10 stop" },
+] as const;
+for (const fullscreen of [false, true]) for (const row of recordingCases) {
+  test(`recording guidance: ${row.name}, ${fullscreen ? "fullscreen" : "regular"}`, async (t) => {
+    t.mock.timers.enable({ apis: ["setInterval"] });
+    const h = harness({ fullscreen, nativeFeedback: true, bindings: "native" in row ? row.native : undefined });
+    h.setConfig(parseConfig({ keybindings: row.keys }));
+    Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("guidance must not read main identity"); } });
+    h.ctx.modelRegistry = { find: () => { throw new Error("guidance must not probe models"); } } as unknown as ModelRegistry;
+    await h.start(); await h.command("dictation start"); await nextTask();
+    h.setClock(5000); t.mock.timers.tick(1000);
+    const text = h.statuses.get(STATUS_KEY)!, plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+    const expected = `● REC 00:05 · oaistt${row.hints ? ` · ${row.hints}` : ""}`;
+    assert.equal(plain, expected); assert.doesNotMatch(plain, /\n|to stop|to cancel|start|correct|unbound|ready/);
+    assert.deepEqual(h.widgets.get(WIDGET_KEY), [text]);
+    const indicator = h.ui.theme.fg("error", "● REC 00:05");
+    assert.ok(text.startsWith(indicator));
+    const guidance = text.slice(indicator.length);
+    assert.ok(guidance.startsWith(h.ui.theme.getFgAnsi("muted")));
+    assert.ok(!guidance.includes(h.ui.theme.getFgAnsi("error")));
+    const prefix = h.ui.theme.style("oaistt", { fg: "text", bold: true }).split("oaistt")[0]!;
+    assert.ok(guidance.includes(`${prefix}oaistt`));
+    for (const block of row.hints.split(" · ").filter(Boolean)) {
+      const keys = block.replace(/ (stop|cancel)$/u, "");
+      const keyPrefix = h.ui.theme.style(keys, { fg: "text", bold: true }).split(keys)[0]!;
+      assert.ok(guidance.includes(`${keyPrefix}${keys}`));
+    }
+    const native = h.mode.widgetContainerAbove.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    assert.ok(native.includes(expected));
+    for (const width of [32, 40, 80, 120]) for (const line of h.mode.widgetContainerAbove.render(width)) assert.ok(visibleWidth(line) <= width);
+    assert.equal(h.counts().captures, 1); assert.equal(h.signals[0]!.aborted, false);
+    assert.equal(h.promptCalls.length, 0); assert.equal(h.main.signal.aborted, false);
+    await h.command("cancel"); await h.controller.settled();
+    assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+  });
+}
+
+test("recording guidance refreshes theme and elapsed time but ignores pending configured keys", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const h = harness({ nativeFeedback: true }); await h.start(); h.f8(); await nextTask();
+  const before = h.statuses.get(STATUS_KEY)!;
+  h.setConfig(parseConfig({ keybindings: { "dictation.toggle": "f9", "operation.cancel": "f10" } }));
+  await h.command("reload");
+  initTheme("light", false); h.setClock(12000); t.mock.timers.tick(1000);
+  const after = h.statuses.get(STATUS_KEY)!;
+  assert.notEqual(after, before);
+  assert.equal(after.replace(/\x1b\[[0-9;]*m/g, ""), "● REC 00:12 · oaistt · F8 stop · F12 cancel");
+  const indicator = h.ui.theme.fg("error", "● REC 00:12");
+  assert.ok(after.startsWith(indicator));
+  assert.ok(after.slice(indicator.length).startsWith(h.ui.theme.getFgAnsi("muted")));
+  assert.deepEqual(h.widgets.get(WIDGET_KEY), [after]);
+  assert.equal(h.signals[0]!.aborted, false); assert.equal(h.counts().captures, 1);
+  h.f8(); await nextTask();
+  assert.equal(h.controller.phase, "transcribing");
+  assert.equal(h.statuses.get(STATUS_KEY), h.ui.theme.fg("muted", "Transcribing…"));
+  assert.doesNotMatch(h.statuses.get(STATUS_KEY)!, /REC|oaistt|stop|cancel/);
+  h.f12(); await h.controller.settled();
+  assert.equal(h.statuses.get(STATUS_KEY), undefined); assert.equal(h.widgets.get(WIDGET_KEY), undefined);
+});
