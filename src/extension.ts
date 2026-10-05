@@ -324,7 +324,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     const model = first === "$current" ? ctx.model : undefined;
     const correction = !config ? "Draft correction: configuration unavailable." : !first
       ? "Draft correction needs a correction model; none is configured."
-      : `Correction models: ${first === "$current" ? model ? safeLabel(`${model.provider}/${model.id}`)
+      : `Correction model: ${first === "$current" ? model ? safeLabel(`${model.provider}/${model.id}`)
         : "$current (unavailable)" : safeLabel(first)}`;
     return [
       strong("oaistt — speech to text and draft correction"), "",

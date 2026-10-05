@@ -504,8 +504,8 @@ for (const first of ["fixture/first", "$current"]) test(`help previews only firs
   h.ctx.modelRegistry = { find: () => { throw new Error("help must not probe models"); } } as unknown as ModelRegistry;
   await h.start(); await h.command("help");
   const text = h.notices.at(-1)!;
-  const preview = text.split("\n").find(line => line.trimStart().startsWith("Correction models:"));
-  assert.equal(preview, `  Correction models: ${first === "$current" ? "fixture/main" : first}`);
+  const preview = text.split("\n").find(line => line.trimStart().startsWith("Correction model:"));
+  assert.equal(preview, `  Correction model: ${first === "$current" ? "fixture/main" : first}`);
   assert.doesNotMatch(preview!, /→|fallback/);
   assert.match(text, /next order: .* → fixture\/fallback/);
   assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
@@ -515,11 +515,11 @@ for (const first of ["fixture/first", "$current"]) test(`help previews only firs
 test("help distinguishes missing current identity from unavailable configuration and sanitizes model labels", async () => {
   const h = harness(); h.config.correction.order = ["$current"];
   await h.start(); await h.command("help");
-  assert.match(h.notices.at(-1)!, /Correction models: \$current \(unavailable\)/);
+  assert.match(h.notices.at(-1)!, /Correction model: \$current \(unavailable\)/);
   h.setModel({ provider: "fixture\n", id: `model\x1b\x07\u202e${"x".repeat(100)}` } as ExtensionContext["model"]);
   await h.command("help");
-  const line = h.notices.at(-1)!.split("\n").find(line => line.includes("Correction models:"))!;
-  assert.equal(line, `  Correction models: fixture/model${"x".repeat(51)}`);
+  const line = h.notices.at(-1)!.split("\n").find(line => line.includes("Correction model:"))!;
+  assert.equal(line, `  Correction model: fixture/model${"x".repeat(51)}`);
   h.selection.reset(); await h.command("help");
   assert.match(h.notices.at(-1)!, /Draft correction: configuration unavailable/);
   assert.doesNotMatch(h.notices.at(-1)!, /none is configured/);
