@@ -52,7 +52,7 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes("oaistt — speech to text · F8 to dictate · F7 to correct · F12 to cancel · see /oaistt help")));
     assert.ok(notices.some((text) => text.replace(/\x1b\[[0-9;]*m/g, "").includes("Configuration loaded successfully")));
     const installed = await loadInstallationIdentity(product);
-    assert.equal(installed.version, "0.2.1");
+    assert.equal(installed.version, "0.2.2");
     assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes(`${installationLabel(installed)}: idle.`)));
     native.ui.setEditorText("synthetic retained draft");
     await command.handler("recorder source", runner.createCommandContext());

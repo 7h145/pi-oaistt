@@ -1,5 +1,9 @@
 # Development and verification
 
+The owner considers v1 feature scope complete. Current focus is stabilization:
+further testing, bug fixes and small tweaks. The acceptance/release gaps below
+remain open; feature completeness is not a claim of full qualification.
+
 ## Interface policy during v0.*
 
 During pre-v1 development, backward compatibility and interface stability are
