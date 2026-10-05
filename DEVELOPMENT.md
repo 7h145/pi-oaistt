@@ -114,6 +114,11 @@ captured unsent draft, not attachment file contents. Requests have no tools, use
 isolated target/context data, and reuse the snapshot across attempts. JSON isolation
 is not proof of semantic resistance to adversarial text.
 
+The prompt requests minimal edits, confident contextual spelling recovery and
+preservation of deliberate repetition, emphasis and informal phrasing. Uncertain
+edits retain the original; context cannot add facts or force name matches. Prompt
+tests verify instructions and dispatch, not model compliance or correction quality.
+
 Ordinary correction exhaustion gives guarded raw dictation plus a notice or leaves
 manual drafts unchanged. Invalid thinking policy stops locally with a red error;
 unused later tuning cannot reject an earlier success. Cancellation gives no result.
@@ -174,7 +179,7 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 492 synthetic tests and typechecking pass** against Pi
+**Latest full baseline: 493 synthetic tests and typechecking pass** against Pi
 0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Recording covers 14
@@ -229,8 +234,8 @@ The owner reports roughly **100 capture/correction runs** and accepts:
 
 - **V2 microphone capture:** works as expected, including Bluetooth; failures
   are helpful.
-- **V4 correction/model quality:** acceptable; possible prompt/config tuning is
-  optional, with no urgent need.
+- **V4 correction/model quality:** overall workflow is acceptable. The current
+  contextual-spelling/voice-preservation prompt still needs live quality checks.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
   workflow. Help/status UX is owner-confirmed. A live dictation smoke test confirms
   the clean footer, above-editor line, guidance and working cancellation.
@@ -244,7 +249,7 @@ recordings or private configuration are retained.
 | V1 | Installation/container setup | Fresh-install/recovery cases remain open |
 | V2 | Microphone capture | Owner-accepted, including Bluetooth |
 | V3 | STT/auth/fallback | Basic flow exercised; routing/auth/fallback cases remain open |
-| V4 | Correction/model quality | Owner-accepted; tuning optional |
+| V4 | Correction/model quality | Overall workflow owner-accepted; current prompt quality unqualified |
 | V5 | F7/draft preservation | Clipboard/images, undo and edit-cancellation cases remain open |
 | V6 | Busy/lifecycle paths | Live busy/compaction/navigation/reload cases remain open |
 | V7 | Keys/presentation | Owner-accepted for Neovim/tmux; widget-only layout, guidance and cancel smoke-tested |
