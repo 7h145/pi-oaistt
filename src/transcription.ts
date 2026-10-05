@@ -114,6 +114,13 @@ export async function transcribe(
 }
 
 
+/** Following-only candidates for a new operation; shared with the status preview. */
+export function transcriptionCandidates(config: Config, selected: string): string[] {
+  const index = config.transcription.order.indexOf(selected);
+  if (index < 0) return [];
+  return config.transcription.automaticFallback ? config.transcription.order.slice(index) : [selected];
+}
+
 /** Consent-limited sequential chain; identical owned WAV, fresh bodies/readers. */
 export async function transcriptionChain(
   config: Config, selected: string, signal: AbortSignal,
@@ -127,9 +134,8 @@ export async function transcriptionChain(
     if (isCurrent && !isCurrent()) throw new DOMException("Transcription ownership changed", "AbortError");
   };
   check(signal);
-  const index = config.transcription.order.indexOf(selected);
-  if (index < 0) throw new DictationError("Unknown or inactive transcription profile.");
-  const names = config.transcription.automaticFallback ? config.transcription.order.slice(index) : [selected];
+  const names = transcriptionCandidates(config, selected);
+  if (!names.length) throw new DictationError("Unknown or inactive transcription profile.");
   const deadline = Math.min(startedDeadline ?? Infinity, performance.now() + config.transcription.totalTimeoutSeconds * 1000);
   return bounded(async totalSignal => {
     let failed: { name: string; reason: FailureReason } | undefined;

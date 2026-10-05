@@ -21,7 +21,7 @@ import { correct } from "./correction.ts";
 import { installEditorBoundary, type EditorBoundary } from "./editor.ts";
 import { DictationError, OperationController, type DeliveryOwner, type Phase, type Pipeline, type OperationKind } from "./operation.ts";
 import { recordParecord, listRecordingSources } from "./recorder.ts";
-import { transcribe, prepareAudio, transcriptionChain, TranscriptionFailure } from "./transcription.ts";
+import { transcribe, prepareAudio, transcriptionChain, transcriptionCandidates, TranscriptionFailure } from "./transcription.ts";
 
 export const STATUS_KEY = "footer-compositor:right:80:pi-oaistt";
 export const WIDGET_KEY = "pi-oaistt";
@@ -29,6 +29,11 @@ const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oai
 const displayKeys = (keys: string[]): string => keys.map(key => key.split("+").map(part =>
   /^f\d+$/u.test(part) || part.length <= 1 ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1),
 ).join("+")).join(" / ") || "unbound";
+const CONTROL_ORDER: Action[] = ["dictation.toggle", "editor.correct", "operation.cancel", "dictation.start", "dictation.stop"];
+const CONTROL_DESCRIPTIONS: Record<Action, string> = {
+  "dictation.toggle": "Start or stop dictation", "editor.correct": "Correct the current draft",
+  "operation.cancel": "Cancel oaistt", "dictation.start": "Start recording", "dictation.stop": "Stop and transcribe",
+};
 type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile">;
 export interface Dependencies {
   identity: () => Promise<InstallationIdentity>;
@@ -273,32 +278,42 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       if (request === epoch) selection.saved(config, selection.generation);
     } finally { changing--; }
   }
-  const bindingsLabel = (bindings: Bindings) => ACTIONS.map(a => `${a}=${bindings[a].join(",") || "unbound"}`).join("; ");
   function statusText(ctx: ExtensionContext): string {
     const config = selection.config;
-    const label = (key: string) => ctx.ui.theme.style(`${key}:`, { fg: "accent", bold: true });
-    const row = (key: string, value: string) => `${label(key)}${" ".repeat(Math.max(1, 16 - key.length - 1))}${value}`;
-    // Preview next-operation policy, not the active attempt or proven availability.
-    // Only inspect the main identity when explicitly authorized by $current.
-    const fallback = config ? config.transcription.automaticFallback ? "on" : "off" : "unavailable";
-    const activeSource = controller.captureSource;
-    const source = activeSource === undefined ? config?.recorder.source : activeSource;
+    const strong = (text: string) => ctx.ui.theme.style(text, { fg: "text", bold: true });
+    const candidates = (values: string[], empty: string): string[] => values.length
+      ? values.map((value, index) => `    • ${index === 0 ? strong(value) : value}`) : [`    ${empty}`];
+    const keys = (bindings: Bindings): string[] => CONTROL_ORDER.map(action => {
+      const label = displayKeys(bindings[action]);
+      return `  • ${bindings[action].length ? strong(label) : label} — ${CONTROL_DESCRIPTIONS[action]}`;
+    });
+    // Preview next-operation candidates, not live attempts or proven availability.
+    // Share following-only STT order with dispatch; $current alone authorizes identity access.
+    const profiles = config && selection.selected ? transcriptionCandidates(config, selection.selected).map(safeLabel) : [];
     const model = config?.correction.order.includes("$current") ? ctx.model : undefined;
     const models = config?.correction.order.map(selector => selector === "$current"
-      ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})`
-      : safeLabel(selector)).join(" → ") || "none (no requests)";
+      ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})` : safeLabel(selector)) ?? [];
+    const activeSource = controller.captureSource;
+    const source = activeSource === undefined ? config?.recorder.source : activeSource;
     const lines = [
-      `${label(installationLabel(identity))} ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. ${label("Config")} ${config ? "ready" : "unavailable"}.`,
-      "",
-      row("Transcription", `active: ${activeProfile ?? "none"}; next: ${selection.selected ?? "unavailable"}; default: ${config?.transcription.order[0] ?? "unavailable"}; fallback: ${fallback}.`),
-      row("Correction", config ? `automatic ${config.correction.automatic ? "on" : "off"}; next order: ${models}.` : "unavailable."),
-      row("Capture device", `${source === undefined ? "unavailable" : source === null ? "server default source" : safeLabel(source)}.`),
-      row("Active keys", `${bindingsLabel(activeBindings)}.`),
+      `${strong(`${installationLabel(identity)}:`)} ${controller.phase}${controller.kind ? ` (${controller.kind})` : ""}. Configuration ${config ? "loaded successfully" : "unavailable"}.`, "",
+      strong("Transcription:"),
+      `  Active:   ${activeProfile ? safeLabel(activeProfile) : "none"}`,
+      `  Default:  ${config ? safeLabel(config.transcription.order[0]!) : "unavailable"}`,
+      `  Fallback: ${config ? config.transcription.automaticFallback ? "on" : "off" : "unavailable"}`,
+      "  Profiles, in order:", ...candidates(profiles, "unavailable"), "",
+      strong("Correction:"),
+      `  Automatic: ${config ? config.correction.automatic ? "on" : "off" : "unavailable"}`,
+      "  Models, in order:", ...candidates(models, config ? "none (no requests)" : "unavailable"), "",
+      strong("Capture device:"),
+      `  ${source === undefined ? "unavailable" : source === null ? "server default source" : safeLabel(source)}`, "",
+      strong("Active keys:"), ...keys(activeBindings),
     ];
     if (config && JSON.stringify(config.keybindings) !== JSON.stringify(registeredBindings)) lines.push(
-      row("Configured/pending keys", `${bindingsLabel(config.keybindings)}.`),
+      "", strong("Configured/pending keys:"), ...keys(config.keybindings),
       "Full Pi /reload required; native conflicts may disable bindings. Cross-extension conflicts follow Pi priority.",
     );
+    lines.push("", `See ${strong("/oaistt help")} for commands and controls.`);
     return lines.join("\n");
   }
   function status(ctx: ExtensionContext, lead?: string): void {
@@ -308,19 +323,15 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     const strong = (text: string) => ctx.ui.theme.style(text, { fg: "text", bold: true });
     const command = (syntax: string, description?: string) => `  ${strong(syntax)}${description
       ? `${" ".repeat(Math.max(2, 43 - syntax.length))}${description}` : ""}`;
-    const descriptions: Record<Action, string> = {
-      "dictation.toggle": "Start or stop dictation", "editor.correct": "Correct the current draft",
-      "operation.cancel": "Cancel oaistt", "dictation.start": "Start recording", "dictation.stop": "Stop and transcribe",
-    };
     const controls = ACTIONS.filter(action => DEFAULT_BINDINGS[action].length || activeBindings[action].length).map(action => {
       const keys = displayKeys(activeBindings[action]);
       const defaults = JSON.stringify(activeBindings[action]) === JSON.stringify(DEFAULT_BINDINGS[action])
         ? "" : ` (default: ${displayKeys(DEFAULT_BINDINGS[action])})`;
-      return `  ${strong(keys)}${" ".repeat(Math.max(2, 7 - keys.length))}${descriptions[action]}${defaults}`;
+      return `  ${strong(keys)}${" ".repeat(Math.max(2, 7 - keys.length))}${CONTROL_DESCRIPTIONS[action]}${defaults}`;
     });
     const config = selection.config, first = config?.correction.order[0];
     // The compact preview names only the first configured selector, not a proven
-    // usable model. Full status below retains the complete next-operation order.
+    // usable model. Separate status retains the complete next-operation order.
     const model = first === "$current" ? ctx.model : undefined;
     const correction = !config ? "Draft correction: configuration unavailable." : !first
       ? "Draft correction needs a correction model; none is configured."
@@ -346,7 +357,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       command("/oaistt recorder source NAME [--save] (r s)"),
       "    Select an input. Use NAME “default” to follow the server default.", "",
       strong("Settings and help:"),
-      command("/oaistt", "Concise help and status"),
+      command("/oaistt", "Show current state and selections"),
       command("/oaistt status (s)", "Show current state and selections"),
       command("/oaistt help (h)", "Show this help"),
       command("/oaistt reload (rl)", "Reload settings for subsequent work"), "",
@@ -359,18 +370,16 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       "  dictation or correction in progress.",
     ].join("\n");
   }
-  function help(ctx: ExtensionContext, concise: boolean): void {
-    const summary = "Defaults: F8 dictation; F7 correct draft; F12 cancel (never submits). /oaistt help lists commands and controls.";
-    // Pi coalesces consecutive info notices. Send help and state atomically so
-    // the final status/pending-key notice cannot replace the command help.
-    notice(ctx, [concise ? summary : commandHelp(ctx), statusText(ctx)].join("\n\n"));
+  function help(ctx: ExtensionContext): void {
+    // One help-only notice: expanded status must not scroll commands out of view.
+    notice(ctx, commandHelp(ctx));
   }
   async function command(args: string, ctx: ExtensionContext): Promise<void> {
     const current = validScope(ctx); if (!current) return;
     const p = args.trim().split(/\s+/u).filter(Boolean);
-    const exact: Record<string, string> = { "": "help", h: "help", s: "status", x: "cancel", rl: "reload", "d t": "dictation toggle", "d start": "dictation start", "d stop": "dictation stop", "r l": "recorder sources", "t l": "transcription list" };
+    const exact: Record<string, string> = { "": "status", h: "help", s: "status", x: "cancel", rl: "reload", "d t": "dictation toggle", "d start": "dictation start", "d stop": "dictation stop", "r l": "recorder sources", "t l": "transcription list" };
     const action = exact[p.join(" ")] ?? p.join(" ");
-    if (action === "help") { help(ctx, p.length === 0); return; }
+    if (action === "help") { help(ctx); return; }
     if (action === "status") { status(ctx); return; }
     if (action === "cancel") { controller.cancel(); return; }
     if (["dictation toggle", "dictation start", "dictation stop"].includes(action)) {

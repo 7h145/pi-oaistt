@@ -13,7 +13,8 @@ configuration. Do not enable raw provider/terminal tracing.
 - Review settings against the [configuration reference](configuration.md),
   including the intended endpoint/model/auth and authorized data destinations.
   No file/transcription section means the built-in OpenAI profile.
-- Load code/keys with full Pi `/reload`, then inspect `/oaistt` help/status.
+- Load code/keys with full Pi `/reload`, then inspect `/oaistt` status and
+  `/oaistt help` separately.
 - Confirm `pactl`/`parecord`, host-approved audio access and available unmuted microphone.
   Do not alter host defaults/volume or expose a socket merely for testing. Monitors
   are not microphones.

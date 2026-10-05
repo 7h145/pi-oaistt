@@ -32,6 +32,11 @@ function deferred<T>() {
   const promise = new Promise<T>((yes) => { resolve = yes; });
   return { promise, resolve };
 }
+function statusSection(text: string, title: string): string {
+  const marker = `${title}:\n`, index = text.indexOf(marker);
+  assert.ok(index >= 0, `Missing status section: ${title}`);
+  return text.slice(index + marker.length).split("\n\n")[0]!;
+}
 const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const dispose of open.splice(0).reverse()) await dispose(); });
 
@@ -420,7 +425,7 @@ test("manual empty/unchanged output creates no request/write or meaningless undo
   h.f7(); await nextTask(); h.edited.resolve({ kind: "corrected", text: "draft" }); await h.controller.settled();
   assert.equal(writes, 0); assert.equal(h.ui.getEditorText(), "draft");
 });
-test("manual and dictation cannot restart/retarget one another; bare root is read-only help/status", async () => {
+test("manual and dictation cannot restart/retarget one another; bare root is read-only status", async () => {
   const h = harness(); await h.start(); await h.command(""); assert.equal(h.controller.active, false); assert.equal(h.counts().captures, 0);
   h.ui.setEditorText("draft"); h.f7(); await nextTask(); h.f8(); await h.command("d start");
   assert.equal(h.controller.kind, "manual"); assert.equal(h.counts().captures, 0);
@@ -507,7 +512,8 @@ for (const first of ["fixture/first", "$current"]) test(`help previews only firs
   const preview = text.split("\n").find(line => line.trimStart().startsWith("Correction model:"));
   assert.equal(preview, `  Correction model: ${first === "$current" ? "fixture/main" : first}`);
   assert.doesNotMatch(preview!, /→|fallback/);
-  assert.match(text, /next order: .* → fixture\/fallback/);
+  assert.doesNotMatch(text, /fixture\/fallback|Models, in order:|Active keys:|oaistt v0\.2\.0/);
+  await h.command("status"); assert.match(h.notices.at(-1)!, /    • fixture\/fallback/);
   assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
   assert.equal(h.ctx.sessionManager.getEntries().length, 0); assert.equal(h.promptCalls.length, 0);
 });
@@ -636,14 +642,14 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.match(rendered, /dictation toggle/); assert.match(rendered, /recorder sources/);
     assert.match(rendered, /transcription profile NAME/); assert.match(rendered, /Controls:/);
-    assert.match(rendered, /Active keys/); assert.match(rendered, /oaistt v0\.2\.0: idle/);
+    assert.doesNotMatch(rendered, /Active keys:|Configuration loaded successfully|oaistt v0\.2\.0/);
     assert.equal(h.notices.length, 1);
     const text = h.notices[0]!;
     assert.ok(text.startsWith("oaistt — speech to text and draft correction\n\nDictate into Pi’s prompt draft"));
     assert.ok(text.includes("oaistt never submits a prompt on its own."));
     assert.ok(text.includes("Draft correction needs a correction model; none is configured."));
     const sections = ["Controls:", "Abbreviations appear in parentheses:", "Dictation:", "Transcription:",
-      "Capture device:", "Settings and help:", "Notes:", "oaistt v0.2.0:"];
+      "Capture device:", "Settings and help:", "Notes:"];
     const positions = sections.map(section => text.indexOf(section));
     assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
     assert.match(text, /\(d t\) means \/oaistt d t/);
@@ -656,8 +662,7 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     assert.match(text, /F8\s+Start or stop dictation/);
     assert.match(text, /F7\s+Correct the current draft/);
     assert.match(text, /F12\s+Cancel oaistt/);
-    const styled = h.styledNotices.at(-1)!;
-    const styledHelp = styled.slice(0, styled.lastIndexOf("\n", styled.indexOf("oaistt v0.2.0:")));
+    const styledHelp = h.styledNotices.at(-1)!;
     assert.ok(styledHelp.startsWith(h.ui.theme.getFgAnsi("muted")));
     assert.ok(!styledHelp.includes(h.ui.theme.getFgAnsi("accent")));
     for (const highlight of ["Controls:", "Dictation:", "Notes:", "F8", "/oaistt transcription profile NAME [--save] (t p)"]) {
@@ -677,7 +682,7 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
   assert.equal(h.ctx.sessionManager.getEntries().length, entries);
 });
 
-test("help shows actual disabled/rebound controls and pending keys in one native-visible response", async () => {
+test("help shows actual controls; pending bindings remain in standalone status", async () => {
   const h = harness({ nativeNotifications: true, bindings: { "app.model.select": "f6" } });
   h.setConfig(parseConfig({ keybindings: { "dictation.toggle": "f9", "editor.correct": "f6", "operation.cancel": [] } }));
   await h.start(); h.notices.length = 0; await h.command("help");
@@ -692,9 +697,14 @@ test("help shows actual disabled/rebound controls and pending keys in one native
     h.notices.length = 0; await h.command(args);
     const rendered = h.mode.chatContainer.render(80).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.equal(h.notices.length, 1);
-    assert.match(rendered, /Active keys:\s+dictation.toggle=f9/);
-    assert.match(rendered, /Configured\/pending keys: dictation.toggle=f10/);
-    assert.match(rendered, /Full Pi \/reload required/);
+    if (args === "help") {
+      assert.match(rendered, /F9\s+Start or stop dictation/);
+      assert.doesNotMatch(rendered, /Active keys:|Configured\/pending keys:/);
+    } else {
+      assert.match(rendered, /Active keys:\s+• F9 — Start or stop dictation/);
+      assert.match(rendered, /Configured\/pending keys:\s+• F10 — Start or stop dictation/);
+      assert.match(rendered, /Full Pi \/reload required/);
+    }
   }
   h.notices.length = 0; await h.command("--help");
   assert.equal(h.notices.length, 1); assert.equal(h.categories.at(-1), "error");
@@ -709,11 +719,66 @@ for (const kind of ["dictation", "manual"] as const) test(`help/status during ${
   for (const args of ["", "help", "h", "status", "s"]) {
     await h.command(args);
     assert.equal(h.controller.kind, kind); assert.equal(h.signals[0]!.aborted, false);
-    assert.match(h.notices.at(-1)!, kind === "dictation" ? /recording \(dictation\)/ : /correcting \(manual\)/);
+    if (["help", "h"].includes(args)) assert.doesNotMatch(h.notices.at(-1)!, /oaistt v0\.2\.0|Active keys:/);
+    else assert.match(h.notices.at(-1)!, kind === "dictation" ? /recording \(dictation\)/ : /correcting \(manual\)/);
     assert.equal(h.ui.getEditorText(), "synthetic draft");
   }
   assert.deepEqual(h.counts(), counts); assert.equal(h.main.signal.aborted, false);
   assert.equal(h.ctx.sessionManager.getEntries().length, entries); assert.equal(h.promptCalls.length, 0);
+});
+
+test("bare root, whitespace root and status aliases render identical full status; help stays separate", async () => {
+  const h = harness({ nativeNotifications: true }); h.setConfig(profilesConfig()); await h.start();
+  const counts = h.counts(), entries = h.ctx.sessionManager.getEntries().length;
+  let expected: string | undefined;
+  for (const args of ["", "   ", "status", "s"]) {
+    h.notices.length = 0; await h.command(args);
+    assert.equal(h.notices.length, 1);
+    const text = h.styledNotices.at(-1)!;
+    expected ??= text; assert.equal(text, expected);
+    assert.match(h.notices[0]!, /See \/oaistt help for commands and controls/);
+    assert.doesNotMatch(h.notices[0]!, /Defaults:|Abbreviations appear|Settings and help:/);
+  }
+  for (const args of ["help", "h"]) {
+    h.notices.length = 0; await h.command(args);
+    assert.equal(h.notices.length, 1);
+    assert.doesNotMatch(h.notices[0]!, /oaistt v0\.2\.0|Active keys:|Profiles, in order:|Models, in order:|Configuration loaded successfully/);
+    assert.match(h.notices[0]!, /Settings and help:/);
+  }
+  assert.deepEqual(h.counts(), counts); assert.equal(h.ctx.sessionManager.getEntries().length, entries);
+  assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0); assert.equal(h.main.signal.aborted, false);
+});
+
+for (const fallback of [false, true]) for (const selected of ["local", "remote"]) {
+  test(`status previews effective STT order and bold start: fallback=${fallback}, selected=${selected}`, async () => {
+    const h = harness({ sources: async () => { throw new Error("status must not query audio"); } });
+    const config = profilesConfig(); config.transcription.automaticFallback = fallback;
+    h.setConfig(config); await h.start(); await h.command(`t p ${selected}`);
+    Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("unauthorized main identity access"); } });
+    h.ctx.modelRegistry = { find: () => { throw new Error("status must not probe models"); } } as unknown as ModelRegistry;
+    const counts = h.counts(), generation = h.selection.generation;
+    await h.command("status");
+    const section = statusSection(h.notices.at(-1)!, "Transcription");
+    const expected = fallback && selected === "local" ? ["local", "remote"] : [selected];
+    assert.deepEqual(section.split("    • ").slice(1).map(line => line.split("\n")[0]), expected);
+    assert.match(section, /Default:  local/);
+    assert.ok(section.includes(`Fallback: ${fallback ? "on" : "off"}`));
+    const prefix = h.ui.theme.style(selected, { fg: "text", bold: true }).split(selected)[0]!;
+    assert.ok(h.styledNotices.at(-1)!.includes(`    • ${prefix}${selected}`));
+    assert.doesNotMatch(h.notices.at(-1)!, /\[next\]|\[selected\]/);
+    assert.deepEqual(h.counts(), counts); assert.equal(h.selection.generation, generation);
+    assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0); assert.equal(h.promptCalls.length, 0);
+  });
+}
+
+test("active dictation profile stays separate from a newer next-operation chain", async () => {
+  const h = harness(); h.setConfig(profilesConfig()); await h.start(); h.f8(); await nextTask();
+  await h.command("t p remote"); await h.command("status");
+  const section = statusSection(h.notices.at(-1)!, "Transcription");
+  assert.equal(section, "  Active:   local\n  Default:  local\n  Fallback: on\n  Profiles, in order:\n    • remote");
+  assert.equal(h.signals[0]!.aborted, false); assert.equal(h.counts().captures, 1);
+  assert.deepEqual(h.settings[0]!.transcription.order, ["local", "remote"]);
+  await h.command("cancel"); await h.controller.settled();
 });
 
 test("status-only output omits command help; extra help/status arguments stay invalid", async () => {
@@ -744,7 +809,7 @@ for (const automatic of [true, false]) for (const state of ["empty", "configured
     h.config.correction.order = state === "empty" ? [] : [state === "configured" ? "fixture/correction" : "missing/model"];
     h.setModel(provider.getModel("correction"));
     await h.start(); await h.command("status");
-    assert.match(h.notices.at(-1)!, new RegExp(`Correction:\\s+automatic ${automatic ? "on" : "off"}; next order:`));
+    assert.match(statusSection(h.notices.at(-1)!, "Correction"), new RegExp(`Automatic: ${automatic ? "on" : "off"}`));
     assert.ok(h.notices.at(-1)!.includes(state === "empty" ? "none (no requests)" : h.config.correction.order[0]!));
     h.ui.setEditorText(manual ? "raw synthetic" : "");
     if (manual) h.f7();
@@ -773,7 +838,7 @@ test("source-list failures redact unknown errors rather than exposing backend st
   assert.equal(h.notices.at(-1), "Cannot list recording sources; check Pulse server access.");
 });
 
-for (const fullscreen of [false, true]) test(`status has ordered styled labels, model identities and explicit fallback (${fullscreen ? "fullscreen" : "regular"})`, async () => {
+for (const fullscreen of [false, true]) test(`status has neutral headings, ordered bullet lists, bold first candidates and explicit fallback (${fullscreen ? "fullscreen" : "regular"})`, async () => {
   const h = harness({ fullscreen, nativeNotifications: true });
   const config = profilesConfig();
   config.correction.automatic = true;
@@ -784,24 +849,31 @@ for (const fullscreen of [false, true]) test(`status has ordered styled labels, 
   h.ctx.modelRegistry = { find: () => { throw new Error("status must not probe models"); } } as unknown as ModelRegistry;
   await h.start(); h.ui.setEditorText("EXCLUDED_SYNTHETIC_DRAFT");
   const counts = h.counts(), entries = h.ctx.sessionManager.getEntries().length;
-  for (const args of ["", "help", "status", "s"]) {
+  for (const args of ["", "status", "s"]) {
     await h.command(args);
     const text = h.notices.at(-1)!;
-    assert.match(text, /Transcription:\s+active: none; next: local; default: local; fallback: on/);
-    assert.match(text, /Correction:\s+automatic on; next order: fixture\/first → \$current \(fixture\/main\) → fixture\/last\/slashed\/語/);
-    assert.doesNotMatch(text, /^Fallback:/m);
+    assert.equal(statusSection(text, "Transcription"), "  Active:   none\n  Default:  local\n  Fallback: on\n  Profiles, in order:\n    • local\n    • remote");
+    assert.equal(statusSection(text, "Correction"), "  Automatic: on\n  Models, in order:\n    • fixture/first\n    • $current (fixture/main)\n    • fixture/last/slashed/語");
     assert.match(text, /Capture device:\s+server default source/);
-    const keys = ["Transcription", "Correction", "Capture device", "Active keys"];
-    const rows = text.slice(text.indexOf("oaistt v0.2.0:")).split("\n").filter(line => keys.some(key => line.startsWith(`${key}:`)));
-    assert.deepEqual(rows.map(line => line.split(":")[0]), keys);
-    assert.ok(rows.every(line => line.match(/^[^:]+:\s+/u)![0].length === 16));
-    assert.doesNotMatch(text, /EXCLUDED_SYNTHETIC_DRAFT|https?:|OPENAI_API_KEY|Active STT|selectors/);
-    for (const key of keys) {
-      const prefix = h.ui.theme.style(`${key}:`, { fg: "accent", bold: true }).split(`${key}:`)[0]!;
-      assert.match(prefix, /\x1b\[/); // Real theme output, not literal Markdown decoration.
-      assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}${key}:`));
-      assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${prefix}${key}:`));
+    const titles = ["Transcription", "Correction", "Capture device", "Active keys"];
+    const positions = titles.map(title => text.indexOf(`${title}:`));
+    assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
+    assert.doesNotMatch(text, /EXCLUDED_SYNTHETIC_DRAFT|https?:|OPENAI_API_KEY|Active STT|selectors|\[next\]|\[selected\]|Config:|ready/);
+    assert.match(text, /Configuration loaded successfully\./);
+    const styled = h.styledNotices.at(-1)!;
+    assert.ok(styled.startsWith(h.ui.theme.getFgAnsi("muted")));
+    assert.ok(!styled.includes(h.ui.theme.getFgAnsi("accent")));
+    for (const highlight of [...titles.map(title => `${title}:`), "local", "fixture/first", "F8", "F7", "F12"]) {
+      const prefix = h.ui.theme.style(highlight, { fg: "text", bold: true }).split(highlight)[0]!;
+      assert.match(prefix, /\x1b\[/);
+      assert.ok(styled.includes(`${prefix}${highlight}`));
+      assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${prefix}${highlight}`));
     }
+    for (const ordinary of ["remote", "$current (fixture/main)", "fixture/last/slashed/語", "unbound"]) {
+      const prefix = h.ui.theme.style(ordinary, { fg: "text", bold: true }).split(ordinary)[0]!;
+      assert.ok(!styled.includes(`${prefix}${ordinary}`));
+    }
+    assert.match(text, /Active keys:\n  • F8 — Start or stop dictation\n  • F7 — Correct the current draft\n  • F12 — Cancel oaistt\n  • unbound — Start recording\n  • unbound — Stop and transcribe/);
     for (const width of [32, 40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
   }
   assert.deepEqual(h.counts(), counts); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
@@ -815,10 +887,10 @@ test("status shows the selected capture device alongside disabled transcription 
     ...profilesConfig().transcription, automaticFallback: false,
   } }));
   await h.start(); await h.command("status");
-  assert.match(h.notices.at(-1)!, /Transcription:.*fallback: off/);
+  assert.match(statusSection(h.notices.at(-1)!, "Transcription"), /Fallback: off/);
   assert.doesNotMatch(h.notices.at(-1)!, /^Fallback:/m);
   assert.match(h.notices.at(-1)!, /Capture device:\s+fixture\.capture\.source/);
-  assert.match(h.notices.at(-1)!, /Correction:\s+automatic on; next order: none \(no requests\)/);
+  assert.match(statusSection(h.notices.at(-1)!, "Correction"), /Automatic: on\n  Models, in order:\n    none \(no requests\)/);
   assert.doesNotMatch(h.notices.at(-1)!, /Recorder:|next capture:/);
 });
 
@@ -829,16 +901,16 @@ test("status does not read the main model unless $current is explicitly configur
   assert.match(h.notices.at(-1)!, /none \(no requests\)/);
 });
 
-test("status marks missing current model and unavailable config without claiming ready defaults", async () => {
+test("status marks missing current model and unavailable config without claiming loaded configuration or defaults", async () => {
   const h = harness(); h.config.correction.order = ["$current"];
   await h.start(); await h.command("status");
   assert.match(h.notices.at(-1)!, /\$current \(unavailable\)/);
   h.selection.reset(); await h.command("status");
-  assert.match(h.notices.at(-1)!, /Config: unavailable/);
-  assert.match(h.notices.at(-1)!, /Correction:\s+unavailable/);
-  assert.match(h.notices.at(-1)!, /Transcription:.*fallback: unavailable/);
+  assert.match(h.notices.at(-1)!, /Configuration unavailable/);
+  assert.match(statusSection(h.notices.at(-1)!, "Correction"), /Automatic: unavailable\n  Models, in order:\n    unavailable/);
+  assert.match(statusSection(h.notices.at(-1)!, "Transcription"), /Default:  unavailable\n  Fallback: unavailable\n  Profiles, in order:\n    unavailable/);
   assert.match(h.notices.at(-1)!, /Capture device:\s+unavailable/);
-  assert.doesNotMatch(h.notices.at(-1)!, /automatic off|server default source/);
+  assert.doesNotMatch(h.notices.at(-1)!, /Automatic: off|server default source|loaded successfully/);
 });
 
 test("status previews next current-model identity without retargeting frozen work", async () => {
@@ -846,7 +918,7 @@ test("status previews next current-model identity without retargeting frozen wor
   const provider = fauxProvider({ provider: "fixture", models: [{ id: "first" }, { id: "second" }] });
   h.setModel(provider.getModel("first")); await h.start(); h.f8(); await nextTask();
   h.setModel(provider.getModel("second")); await h.command("status");
-  assert.match(h.notices.at(-1)!, /next order: \$current \(fixture\/second\)/);
+  assert.match(h.notices.at(-1)!, /Models, in order:\n    • \$current \(fixture\/second\)/);
   h.f8(); h.raw.resolve("synthetic text"); await nextTask();
   assert.deepEqual(h.correctionOptions[0]!.current, { provider: "fixture", id: "first" });
   h.edited.resolve({ kind: "corrected", text: "synthetic corrected" }); await h.controller.settled();
@@ -868,7 +940,7 @@ test("status labels use the current theme on each request", async () => {
   const before = h.styledNotices.at(-1)!;
   initTheme("light", false);
   await h.command("status");
-  const prefix = h.ui.theme.style("Transcription:", { fg: "accent", bold: true }).split("Transcription:")[0]!;
+  const prefix = h.ui.theme.style("Transcription:", { fg: "text", bold: true }).split("Transcription:")[0]!;
   assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}Transcription:`));
   assert.notEqual(h.styledNotices.at(-1), before);
 });
@@ -878,13 +950,13 @@ for (const initial of [null, "fixture.capture.first"]) test(`capture device stat
   await h.start(); h.f8(); await nextTask();
   assert.equal(h.controller.captureSource, initial);
   await h.command("recorder source fixture.capture.second");
-  for (const args of ["status", "help", ""]) {
+  for (const args of ["status", ""]) {
     await h.command(args);
     assert.ok(h.notices.at(-1)!.includes(initial ?? "server default source"));
     assert.doesNotMatch(h.notices.at(-1)!, /fixture\.capture\.second/);
   }
   h.selection.reset(); await h.command("status"); // Failed reload must not hide owned capture metadata.
-  assert.match(h.notices.at(-1)!, /Config: unavailable/);
+  assert.match(h.notices.at(-1)!, /Configuration unavailable/);
   assert.ok(h.notices.at(-1)!.includes(initial ?? "server default source"));
   await h.command("reload");
   await h.command("cancel"); await h.controller.settled();
@@ -908,8 +980,8 @@ test("capture device status uses selected settings during manual correction, wit
 test("capture device labels are control-stripped and bounded", async () => {
   const h = harness(); h.config.recorder.source = `fixture\x1b\x07\u202e${"x".repeat(100)}`;
   await h.start(); await h.command("status");
-  const line = h.notices.at(-1)!.split("\n").find(line => line.startsWith("Capture device:"))!;
-  assert.equal(line, `Capture device: fixture${"x".repeat(57)}.`);
+  const source = statusSection(h.notices.at(-1)!, "Capture device");
+  assert.equal(source, `  fixture${"x".repeat(57)}`);
 });
 
 for (const commit of [undefined, "1234abc"]) test(`status identifies loaded installation, optional commit=${commit ?? "none"}`, async () => {
@@ -917,9 +989,9 @@ for (const commit of [undefined, "1234abc"]) test(`status identifies loaded inst
   const h = harness({ identity: async () => { reads++; return { version: "0.2.0", commit }; } });
   assert.equal(reads, 0); // No factory/import probe.
   await h.start();
-  for (const args of ["", "help", "status", "s", "reload"]) {
+  for (const args of ["", "status", "s", "reload"]) {
     await h.command(args);
-    assert.ok(h.notices.at(-1)!.includes(`oaistt v0.2.0${commit ? ` (${commit})` : ""}: idle. Config: ready.`));
+    assert.ok(h.notices.at(-1)!.includes(`oaistt v0.2.0${commit ? ` (${commit})` : ""}: idle. Configuration loaded successfully.`));
   }
   await h.emit("session_shutdown", { reason: "reload" }); await h.start(); await h.command("status");
   assert.equal(reads, 1);
@@ -929,7 +1001,7 @@ for (const commit of [undefined, "1234abc"]) test(`status identifies loaded inst
 test("installation metadata failure cannot block settings or capture controls", async () => {
   const h = harness({ identity: async () => { throw new Error("EXCLUDED_SYNTHETIC_METADATA"); } });
   await h.start(); await h.command("status");
-  assert.match(h.notices.at(-1)!, /oaistt: idle\. Config: ready/);
+  assert.match(h.notices.at(-1)!, /oaistt: idle\. Configuration loaded successfully/);
   assert.doesNotMatch(h.notices.at(-1)!, /EXCLUDED_SYNTHETIC_METADATA/);
   h.f8(); await nextTask(); assert.equal(h.controller.phase, "recording");
   await h.command("cancel"); await h.controller.settled();

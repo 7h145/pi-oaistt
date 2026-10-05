@@ -50,7 +50,7 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     await command.handler("help", runner.createCommandContext());
     await command.handler("status", runner.createCommandContext());
     assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes("oaistt — speech to text · F8 to dictate · F7 to correct · F12 to cancel · see /oaistt help")));
-    assert.ok(notices.some((text) => text.replace(/\x1b\[[0-9;]*m/g, "").includes("Config: ready")));
+    assert.ok(notices.some((text) => text.replace(/\x1b\[[0-9;]*m/g, "").includes("Configuration loaded successfully")));
     const installed = await loadInstallationIdentity(product);
     assert.equal(installed.version, "0.2.0");
     assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes(`${installationLabel(installed)}: idle.`)));

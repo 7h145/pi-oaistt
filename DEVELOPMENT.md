@@ -140,7 +140,7 @@ non-TUI metadata does not enable recording or editor access.
 
 Help leads with an introduction/active controls, then grouped commands and shared
 notes, using muted text and bold `text` highlights. Its first-model preview does
-not probe availability; appended status retains the full order/pending keys.
+not probe availability. Help stands alone; bare root and status are identical.
 Owner-approved `transcription profile NAME [--save]` / `t p` supersedes the handoff
 spelling, without compatibility aliases or changed safety/selection behavior.
 Recorder `sources` / `source` retain PulseAudio terminology.
@@ -152,16 +152,17 @@ both active start/stop bindings are required to advertise dictation. Incomplete
 pairs and unbound correction/cancel hints are omitted after conflict resolution.
 All-disabled bindings retain title/help. No extra process or health check is added.
 
-Status uses aligned, bold theme-accented labels: Transcription, Correction,
-Capture device, then Active keys. Transcription includes its own brief fallback switch.
-Correction displays the configured next-operation order and resolves an explicitly
-listed `$current` to the main identity at display time, without registry/auth
-probes. This is a policy preview, not a live-attempt/availability claim; active
-work retains its frozen identity. Capture device exposes only the bounded,
-control-stripped selected PA source name, or the server-default selection label.
-Owned dictation uses its frozen source even after settings change or fail to reload;
-idle/manual status uses current settings. No audio query is made. Missing state
-reports unavailable, and theme styling is computed on request.
+Status shares the muted/neutral-bold palette and uses ordered profile/model/key
+bullet lists. Only the first candidate is bold, not a proven usable/live selection.
+STT preview and dispatch share following-only candidate derivation: from the
+process-selected profile, no wrap, single candidate when fallback is off.
+Correction previews the configured order, resolving an explicit `$current` without
+registry/auth probes. Operation identities stay frozen; status previews subsequent
+work. Capture device is the bounded/control-stripped frozen dictation source,
+otherwise current settings, without audio queries. Missing state is unavailable;
+the configuration statement confirms loading only, not resource readiness.
+Pending keys retain full-reload/conflict guidance. Each response is one notice.
+These owner-approved root/help semantics supersede the handoff's concise root help.
 
 Identity is cached at interactive session start from the package manifest and an
 optional bounded read-only package-root Git HEAD query. No parent lookup, ambient
@@ -171,10 +172,10 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 457 synthetic tests and typechecking pass** against Pi
+**Latest full baseline: 463 synthetic tests and typechecking pass** against Pi
 0.99.2 on Node 22.19.0 and 24.21.0, with isolated Pi settings. Help tests cover
-ordered sections/hints, neutral styling, first-model/missing-config previews,
-regular/fullscreen wrapping, actual/pending keys and read-only active ownership.
+help/status separation, root/status identity, effective STT order/bold starts,
+neutral styling, missing state, native wrapping, pending keys and active ownership.
 Both profile command forms cover temporary/save/no-name behavior, rejected syntax,
 frozen settings and newer-choice races. No new live test or host Pi 1.0.2
 requalification is claimed.
@@ -199,7 +200,7 @@ local matrix passes, but a hosted rerun is still needed for CI confirmation.
 | Recorder | Missing tool subsets, executable-access faults, cancellation, isolated PATH lookup with fake clients, redacted server failures and owned capture/cleanup |
 | STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
 | Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
-| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, coalesced help/status rendering, styled/aligned section order and model identities, scoped fallback, no model probes, frozen-versus-next selection, bounded metadata, narrow/wide-character/theme/footer layouts, pending keys and exact aliases |
+| UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, coalesced help/status rendering, neutral list-based sections and candidate identities, scoped fallback, no model probes, frozen-versus-next selection, bounded metadata, narrow/wide-character/theme/footer layouts, pending keys and exact aliases |
 | Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
 | Documentation | Runnable JSON examples, exact default settings and explicit example order |
 

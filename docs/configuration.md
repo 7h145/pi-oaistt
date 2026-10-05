@@ -238,8 +238,9 @@ from manual F7, and is not tracked or rewritten after insertion.
 
 ## Commands
 
-Bare `/oaistt` shows concise help/status. `/oaistt help` lists commands and
-exact aliases, default/active controls, pending bindings and safe usage.
+Bare `/oaistt` and `/oaistt status` show identical full status, with a help hint.
+`/oaistt help` shows commands, exact aliases, default/active controls and safe usage,
+without appended status. Request status separately for pending bindings.
 
 The single-line startup tagline uses active shortcuts after binding-conflict checks,
 with a muted base, bold `text`-colored highlights and `·` separators; Pi handles wrapping. A bound toggle
@@ -249,8 +250,8 @@ omitted independently. `see /oaistt help` always remains. This is orientation,
 not a microphone/provider readiness check.
 
 The status header identifies the loaded installation, for example
-`oaistt v0.2.0 (1234abc): idle. Config: ready.` Version comes from its own
-`package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
+`oaistt v0.2.0 (1234abc): idle. Configuration loaded successfully.` Version comes
+from its own `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
 not a guarantee of an unchanged working tree. Git is optional: npm/non-Git installs
 show the version alone. Only Git metadata at the resolved package root is used;
 the working project, Pi repository and parent repositories are never searched.
@@ -258,14 +259,23 @@ Identity is cached once per interactive extension runtime, so status calls do no
 spawn Git. Missing/malformed metadata cannot block dictation; unavailable version
 metadata leaves the plain `oaistt` header. No paths or Git diagnostics are displayed.
 
-`/oaistt status` uses aligned, theme-accented bold labels, ordered as
-Transcription, Correction, Capture device, and Active keys. Transcription separates the
-active operation's profile from the next selection and saved default; its brief
-`fallback: on/off` field reports transcription-profile failover.
+Status uses muted body text and bold `text` headings/keys, ordered as
+Transcription, Correction, Capture device, and Active keys. Profile/model orders
+and human-readable key mappings are bullet lists; only each order's first candidate
+is bold, with no bracket/selection marker. Unbound controls remain visible but muted.
+Pending bindings add a matching list and full-reload guidance.
+
+Transcription shows the owned operation's profile, saved default and `Fallback`
+switch. Its ordered list previews the effective chain for the next dictation:
+start at the selected profile, then only following profiles if fallback is on,
+without wrapping; otherwise show only the selected profile. Automatic success can
+change this process-local starting point without changing the saved default.
 Correction shows automatic mode and the configured next-operation model order;
-`$current` includes the main model identity at display time, not a claim about
-an active attempt or registry/backend availability. Only an explicitly listed
-`$current` permits reading that identity. Status never probes models or credentials.
+`$current` includes the main identity at display time only when explicitly listed.
+Neither list is a live-attempt/availability claim. Status probes no models, audio
+or credentials. `Configuration loaded successfully` means parsed configuration is
+available, not provider/microphone/shortcut readiness. Failed loading reports
+`Configuration unavailable`, with a separate diagnostic; a missing file uses defaults.
 Capture device shows the selected PA source name, or `server default source`.
 During owned dictation it shows that operation's frozen source selection, not a
 newly changed setting; otherwise it shows the current selection. Names are
@@ -282,7 +292,7 @@ use bold `text` highlights over a muted base, without boxes or section colors.
 Controls include differing defaults and any bound start/stop keys. The compact
 correction line names only the first configured model (resolving `$current` if
 listed first), or explains missing configuration. It is not an availability check;
-the appended status retains the complete next-operation order and pending keys.
+standalone status retains the complete next-operation order and pending keys.
 
 Each response is one UI-only notification so Pi's consecutive-info coalescing
 cannot hide help or pending-key details. Only these long forms/exact aliases

@@ -130,13 +130,16 @@ Equivalent dictation and cancellation commands are:
 /oaistt cancel
 ```
 
-Bare **`/oaistt`** shows concise help and status; it does not start recording.
+**`/oaistt`** and **`/oaistt status`** show identical full status; neither starts
+recording. Status shows the operation, effective transcription fallback chain,
+correction model order, capture device, and active/pending keys. Ordered profiles,
+models and controls appear as bullet lists; the first candidate is bold, without
+implying provider availability. The header identifies the installed package version
+and, for Git checkouts, its seven-character commit hash.
+
 Use **`/oaistt help`** for an introduction, sectioned commands, aliases, active
-shortcuts (with differing defaults), correction setup, and pending key changes.
-**`/oaistt status`** shows the current operation,
-transcription selection, correction model order, transcription fallback policy,
-and capture device without the command list. The header includes the installed
-package version and, for Git checkouts, its seven-character commit hash.
+shortcuts (with differing defaults), and compact correction setup. Help does not
+append status; request it separately to keep commands visible on shorter terminals.
 
 Only one dictation or correction operation runs at a time. Pressing F8
 while transcription, correction, or cleanup is underway reports the
