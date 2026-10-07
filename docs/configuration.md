@@ -195,6 +195,19 @@ a correction-failure notice. F7 uses the same order regardless of this flag.
 Actual correction needs a registered candidate, available Pi credentials and a
 successful request; the flag alone cannot authorize a model.
 
+The workflow selects a prompt composed of shared wording/context/safety rules and
+mode-specific formatting rules; there is no separate mode setting. F7 asks to
+preserve user paragraph breaks, indentation, wrapping, lists, Markdown/code
+structure and outer whitespace. Post-STT correction asks to repair recognition
+errors, punctuation, sentence breaks and accidental whitespace/layout, inferring
+paragraphs/lists only when clear. Unclear structure defaults to one plain-prose
+paragraph; clear paragraphs use blank lines and lists use simple bullets or
+meaningful numbering, without fixed-column wrapping or invented content. Clearly
+intended spoken formatting cues may become formatting, but quoted/discussed cues
+stay content and other requests are never executed. Literal paths and attachment
+references are protected in both prompts. These are model instructions, not a
+promise of formatting accuracy; validate the chosen model in both workflows.
+
 The [README recommendation](../README.md#correction),
 `openai-codex/gpt-6.1-luna`, is opt-in configuration only. It is never a shipped
 candidate, hidden fallback or automatically appended entry. Neither credentials,

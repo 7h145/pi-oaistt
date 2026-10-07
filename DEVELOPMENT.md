@@ -118,10 +118,15 @@ captured unsent draft, not attachment file contents. Requests have no tools, use
 isolated target/context data, and reuse the snapshot across attempts. JSON isolation
 is not proof of semantic resistance to adversarial text.
 
-The prompt requests minimal edits, confident contextual spelling recovery and
-preservation of deliberate repetition, emphasis and informal phrasing. Uncertain
-edits retain the original; context cannot add facts or force name matches. Prompt
-tests verify instructions and dispatch, not model compliance or correction quality.
+Both correction prompts share conservative wording/context/safety/output rules.
+F7 asks to preserve user formatting and outer whitespace; post-STT correction asks
+to repair recognition and layout errors, inferring clear paragraphs/lists or using
+one plain-prose paragraph when unclear, without fixed-column wrapping. Spoken
+formatting cues are limited to formatting, not executing requests. Mode and prompt
+are selected once from trusted operation metadata and stay frozen across attempts;
+manual output keeps outer whitespace, STT output trims it. Prompt tests verify
+instructions, dispatch and response handling, not model compliance or quality.
+Live formatting/quality checks for both mode-specific prompts remain open.
 
 Ordinary correction exhaustion gives guarded raw dictation plus a notice or leaves
 manual drafts unchanged. Invalid thinking policy stops locally with a red error;
@@ -187,7 +192,7 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 529 synthetic tests and typechecking pass** against Pi
+**Latest full baseline: 536 synthetic tests and typechecking pass** against Pi
 0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
@@ -203,7 +208,10 @@ regular/fullscreen while busy: exact styling, theme/pending-key refresh, widths
 footers/main-agent signals. Processing-line presentation is not live-qualified.
 Footer-write guards and stock/custom footer snapshots verify no footer changes,
 including unrelated extension statuses.
-These automated checks do not requalify host Pi 1.0.2.
+Correction tests cover both composed prompts, default/explicit mode dispatch,
+JSON isolation, provider mutation/fallback with frozen mode/prompt, and separate
+manual-preserve/STT-trim response handling. They do not evaluate model formatting
+accuracy or spoken-cue interpretation. These checks do not requalify host Pi 1.0.2.
 
 Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen
 settings and newer-choice races. Installed identity covers optional/malformed
@@ -251,10 +259,10 @@ The owner reports roughly **100 capture/correction runs** and accepts:
 
 - **V2 microphone capture:** works as expected, including Bluetooth; failures
   are helpful.
-- **V4 correction/model quality:** overall workflow is acceptable. With the current
-  prompt, the owner reports correct project spelling despite deliberately sloppy
-  naming. This is an end-to-end smoke check, not attribution to STT or correction;
-  false contextual matches and deliberate repetition/emphasis/voice remain untested.
+- **V4 correction/model quality:** overall workflow is acceptable; the owner reports
+  correct project spelling despite deliberately sloppy naming. This is end-to-end
+  evidence, not STT/correction attribution or qualification of mode-specific prompts.
+  Formatting, false contextual matches and repetition/emphasis/voice need live checks.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
   workflow. Help/status UX, including Notes wrapping/alignment, is owner-confirmed.
   A live dictation smoke test confirms the clean footer, above-editor line, guidance
@@ -269,7 +277,7 @@ recordings or private configuration are retained.
 | V1 | Installation/container setup | Fresh-install/recovery cases remain open |
 | V2 | Microphone capture | Owner-accepted, including Bluetooth |
 | V3 | STT/auth/fallback | Basic flow exercised; routing/auth/fallback cases remain open |
-| V4 | Correction/model quality | Workflow accepted; current project-name smoke passes; false matches/voice checks open |
+| V4 | Correction/model quality | Workflow accepted; mode-specific prompt formatting/quality checks open |
 | V5 | F7/draft preservation | Clipboard/images, undo and edit-cancellation cases remain open |
 | V6 | Busy/lifecycle paths | Live busy/compaction/navigation/reload cases remain open |
 | V7 | Keys/presentation | Owner-accepted for Neovim/tmux; widget-only layout, guidance and cancel smoke-tested |

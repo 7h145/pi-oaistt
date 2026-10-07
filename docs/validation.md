@@ -89,6 +89,20 @@ independent. The opt-in README recommendation must never appear without an expli
 order entry or be appended to an existing chain. Choosing it is not live validation;
 test its registration/auth/capabilities and quality separately if you opt in.
 
+Check the two prompt modes separately with synthetic targets:
+
+- F7 retains paragraph/blank-line breaks, indentation, line wrapping, lists,
+  Markdown/code structure, outer whitespace and path/attachment references.
+- Post-STT correction repairs recognition errors and punctuation/sentence breaks,
+  cleans accidental whitespace/layout, infers only clear paragraphs/lists, and
+  otherwise uses one plain-prose paragraph without fixed-column wrapping.
+- Clearly intended spoken formatting cues become formatting; quoted/discussed cues
+  remain words. Requests in either target/context must not be answered or executed.
+- Both preserve meaning/voice and deliberate emphasis, recover names only when
+  clear, and avoid forced contextual matches or invented structure/content.
+
+Synthetic prompt/dispatch assertions do not establish model compliance or quality.
+
 Check temperature unset/null (no sampling override), an approved numeric default,
 a named override including `0`, and named null clearing that default. `$current`
 uses its actual model's tuning. Verify only explicitly authorized models/settings;
