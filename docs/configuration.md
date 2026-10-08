@@ -208,12 +208,11 @@ stay content and other requests are never executed. Literal paths and attachment
 references are protected in both prompts. These are model instructions, not a
 promise of formatting accuracy; validate the chosen model in both workflows.
 
-The [README recommendation](../README.md#correction),
-`openai-codex/gpt-6.1-luna`, is opt-in configuration only. It is never a shipped
-candidate, hidden fallback or automatically appended entry. Neither credentials,
-a subscription nor the Whisper default grant correction consent. Registration,
-auth and capabilities still use normal request-time checks; no live compatibility
-or quality validation is claimed.
+The [README correction example](../README.md#correction) is opt-in configuration
+only. Its models are never shipped candidates, hidden fallbacks or automatically
+appended entries. Neither credentials, a subscription nor the Whisper default
+grant correction consent. Registration, auth and capabilities still use normal
+request-time checks; no live compatibility or quality validation is claimed.
 
 Resolve only ordered selectors, restart at the beginning each operation, and dedupe
 actual registered provider/model identities at first position. `$current` freezes the

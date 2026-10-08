@@ -237,6 +237,12 @@ local matrix passes, but a hosted rerun is still needed for CI confirmation.
 | Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
 | Documentation | Runnable JSON examples, exact default settings and explicit example order |
 
+The README review simplifies workflow wording and UI detail, explains the current
+profile/model choice and fallbacks, and links whisperer as an optional local-server
+helper. The configuration reference points to the same correction example.
+Typechecking and all 536 synthetic tests pass on Node 26.10.0 after this
+documentation-only change; no new hardware/provider acceptance is claimed.
+
 The owner confirms the nullable-temperature configuration works as expected:
 Codex correction succeeds without an override; explicitly setting
 `correction.defaults.temperature` to zero restores the failing behavior on their

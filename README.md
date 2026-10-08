@@ -35,16 +35,14 @@ Optional correction can repair likely recognition errors before a
 transcription is inserted. Correction is also useful without audio:
 press **F7** to clean up the current draft using bounded conversation
 context to help preserve technical names, terminology, tone, and intent.
-F7 asks to retain your formatting; post-STT correction asks to repair punctuation,
-sentence breaks and recognition-generated layout.
 
-Both workflows work while the main agent is busy. Progress appears in one widget
-above the editor. **F12** cancels pi-oaistt without aborting the main agent;
-Escape keeps its normal Pi behavior.
+You can use either workflow while the main agent is busy. Progress
+appears above the editor. **F12** cancels dictation or correction without
+aborting the main agent; Escape keeps its normal Pi behavior.
 
 ## Requirements
 
-- Pi's interactive terminal UI with the stock editor.
+- Pi's interactive terminal UI with its default prompt editor.
 - Node.js 22.19 or newer.
 - For dictation:
   - Linux with PulseAudio or a PipeWire-Pulse-compatible service;
@@ -54,13 +52,13 @@ Escape keeps its normal Pi behavior.
 - For correction: a model registered in Pi with usable credentials.
 - An API key when the selected transcription service requires one.
 
-Version 0.2.2 is pre-1.0. The tested Pi API baseline is **0.99.2**; the
-live hardware/provider matrix is still being validated. See the
-[validation checklist](docs/validation.md) for outstanding checks.
+Version 0.2.2 is pre-1.0. The tested Pi API baseline is **0.99.2**; further
+microphone and provider checks are still open. See the
+[validation checklist](docs/validation.md) for details.
 
 Dictation and draft correction require the terminal editor, not RPC,
-print, or JSON mode. pi-oaistt does not compose with another custom
-editor.
+print, or JSON mode. Extensions that replace Pi's editor are not
+supported.
 
 In a containerized (or “boxed”) setup, Pi runs inside a container; see
 [piinabox](https://github.com/7h145/piinabox). Audio access needs explicit
@@ -102,17 +100,15 @@ pi
 ```
 
 This transcription key is separate from Pi's chat-provider `/login`.
-For a local service, configure a [transcription profile](#transcription-profiles)
-instead.
+For a local service, configure a
+[transcription profile](#transcription-profiles) instead.
 
 1. Press **F8** and wait for **`● REC`** before speaking.
 2. Speak, then press **F8** again to stop and transcribe.
 3. Wait for the text to appear in the draft. Review it before submitting.
 
-Recording feedback identifies oaistt and the active stop/cancel keys, for example
-`● REC 00:05 · oaistt · F8 stop · F12 cancel`. Only the REC indicator/timer is red;
-guidance uses the toned-down theme. Rebound keys are reflected, and unbound hints
-are omitted. An active toggle takes precedence over an explicit stop key.
+Recording feedback identifies oaistt and the active stop/cancel keys,
+for example `● REC 00:05 · oaistt · F8 stop · F12 cancel`.
 
 You may keep typing while dictation runs. The result appends to the latest
 draft, not the cursor position, without replacing existing text. Press
@@ -124,7 +120,7 @@ The main controls are:
 
 | Default key | Action |
 | --- | --- |
-| **F8** | Start recording, or stop an active recording and use it |
+| **F8** | Start recording, or stop and transcribe |
 | **F7** | Correct the current draft without recording |
 | **F12** | Cancel pi-oaistt only |
 
@@ -137,16 +133,13 @@ Equivalent dictation and cancellation commands are:
 /oaistt cancel
 ```
 
-**`/oaistt`** and **`/oaistt status`** show identical full status; neither starts
-recording. Status shows the operation, effective transcription fallback chain,
-correction model order, capture device, and active/pending keys. Ordered profiles,
-models and controls appear as bullet lists; the first candidate is bold, without
-implying provider availability. The header identifies the installed package version
-and, for Git checkouts, its seven-character commit hash.
+Use **`/oaistt`** or **`/oaistt status`** to see what's running, which
+transcription profiles and correction models will be tried, the recording
+input, and active or pending shortcuts. **Bold marks the current choice
+for the next run; later entries are fallbacks.**
 
-Use **`/oaistt help`** for an introduction, sectioned commands, aliases, active
-shortcuts (with differing defaults), and compact correction setup. Help does not
-append status; request it separately to keep commands visible on shorter terminals.
+**`/oaistt help`** lists commands, aliases, active shortcuts and correction
+setup.
 
 Only one dictation or correction operation runs at a time. Pressing F8
 while transcription, correction, or cleanup is underway reports the
@@ -155,8 +148,8 @@ phase rather than starting another recording.
 ### Correct a draft
 
 After [choosing correction models](#correction), press **F7** with a draft
-in the editor. The result replaces the whole draft directly and can be
-undone with Pi's normal undo control. Identical output makes no undo entry.
+in the editor. The result replaces the whole draft and can be undone with
+Pi's normal undo control.
 
 If you type, paste, attach content, or otherwise change the draft while
 waiting, correction is cancelled instead of overwriting your edits—even
@@ -164,8 +157,7 @@ if you later undo the change. Moving the cursor or changing focus alone
 does not cancel it. Failure leaves the draft untouched; nothing is
 submitted or restored over a newer draft.
 
-F7 works independently of automatic dictation correction. Draft correction
-is invoked with F7, not a typed command.
+Draft correction is available through F7, not a typed command.
 
 ## Correction
 
@@ -180,10 +172,15 @@ appending it to your draft, using the models you configured. Set it to
 `false` to insert the transcription unchanged, without a correction
 request or correction-failure notice.
 
-**F7 works independently of `correction.automatic`.** It corrects the
-current draft using the same model list, whether automatic correction is
-on or off. You can leave automatic correction off and still use F7 after
-typing, pasting, or dictating.
+**F7 works independently of `correction.automatic`.** It uses the same
+model list, so you can leave automatic correction off and still use F7
+on a typed, pasted or dictated draft.
+
+The two workflows ask for different kinds of correction. F7 asks the
+model to keep your formatting. Correction after dictation asks it to
+clean up punctuation, sentence breaks and layout, using plain prose when
+the structure is unclear. Both ask for minimal wording changes, not a
+rewrite.
 
 **Each provider tried receives the target text and bounded conversation
 history.** For dictation, the target is the new transcription, not the
@@ -211,28 +208,20 @@ Merge this section into `pi-oaistt.json`, preserving your other settings,
 then run **`/oaistt reload`**. To use this list for F7 only, change
 `automatic` to `false`.
 
-`"$current"` captures the model selected in Pi when recording or F7 starts.
-Changing Pi's model later does not retarget that correction. The request
-does not inherit the main agent's thinking level. If both entries resolve
-to the same model, it is tried only once. Each correction starts at the
-top of the list and stops at the first valid result.
-
-`openai-codex/gpt-6-luna` is a recommended opt-in choice, not a shipped
-default. Neither it nor `"$current"` is added automatically because you
-have credentials, a subscription, or the default Whisper setup. Verify
-that the model works for your setup; the recommendation is not live
-compatibility or quality validation.
+`"$current"` uses the Pi model selected when you start dictation or press
+F7. The request does not inherit the main agent's thinking level. If both
+entries resolve to the same model, it is tried only once. Each correction
+starts at the top of the list and stops at the first successful response.
 
 If no model succeeds—including when the list is empty—automatic dictation
 inserts the raw transcription with a notice. F7 leaves the draft unchanged.
 Invalid thinking settings stop correction with an error rather than
 trying another model. Cancellation inserts nothing.
 
-The model is asked for minimal edits, not an answer to the draft, and
-cannot call tools. Its output can still be wrong. Review it before
-submission. See the
+The model is asked to edit your draft, not answer it, and is given no
+tools. Its output can still be wrong; review it before submitting. See the
 [correction reference](docs/configuration.md#correction-thinking-and-privacy)
-for per-model thinking, deadlines, context selection, and failure rules.
+for model settings, context selection and failure handling.
 
 ## Configuration
 
@@ -246,11 +235,11 @@ If `PI_CODING_AGENT_DIR` is set, use `pi-oaistt.json` in that directory.
 There is no project configuration layer. Merge the example sections into
 one JSON file; unspecified settings use their defaults.
 
-**`/oaistt reload`** applies pipeline settings to subsequent operations;
-an active operation keeps its starting settings. Code and key changes
-require full Pi **`/reload`**, which cancels active work. The
-[configuration reference](docs/configuration.md) covers all fields,
-defaults, bounds, commands, and exact aliases.
+**`/oaistt reload`** applies settings to the next dictation or correction;
+work already in progress keeps its starting settings. Code and key
+changes require full Pi **`/reload`**, which cancels active work. See the
+[configuration reference](docs/configuration.md) for all settings and
+commands.
 
 ### Full configuration and defaults
 
@@ -372,6 +361,11 @@ with no wrap to earlier entries. Successful profiles are remembered for
 later dictation until you choose or reload settings; this never saves
 configuration automatically.
 
+One option for running a local Whisper server is
+[whisperer](https://github.com/7h145/whisperer), a small whisper.cpp helper
+using Podman. Follow its README for setup and use its transcription
+endpoint in the example above.
+
 ### Recorder and keys
 
 Recording uses the audio server's default microphone unless you choose
@@ -386,8 +380,8 @@ an override. Inspect sources or select one for future recordings with:
 Add `--save` to persist an explicit selection. These commands do not
 change the host's default input, mute, or volume. Default/null follows
 the server's recording default, not `PULSE_SOURCE`. See
-[recorder setup](docs/configuration.md#recorder-and-container-audio) for bounds
-and container requirements.
+[recorder setup](docs/configuration.md#recorder-and-container-audio) for
+recording limits and container requirements.
 
 To change shortcuts, add a `keybindings` section, for example:
 
@@ -434,7 +428,7 @@ Access to a transcription server is separate from microphone access.
 ## Troubleshooting
 
 Start with **`/oaistt status`** and **`/oaistt help`**. The startup tagline
-lists active shortcuts, not microphone capture, credentials, or provider health.
+lists active shortcuts; it does not check the microphone or providers.
 
 - **Missing audio tools:** on Debian-family systems, install `pulseaudio-utils`
   where Pi runs, then retry. The extension never installs packages.
