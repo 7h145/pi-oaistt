@@ -135,8 +135,8 @@ Equivalent dictation and cancellation commands are:
 
 Use **`/oaistt`** or **`/oaistt status`** to see what's running, which
 transcription profiles and correction models will be tried, the recording
-input, and active or pending shortcuts. **Bold marks the current choice
-for the next run; later entries are fallbacks.**
+input, and active or pending shortcuts. Bold marks the current choice
+for the next run; later entries are fallbacks.
 
 **`/oaistt help`** lists commands, aliases, active shortcuts and correction
 setup.

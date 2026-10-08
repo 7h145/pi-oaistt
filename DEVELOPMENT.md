@@ -159,8 +159,11 @@ Owner-approved `transcription profile NAME [--save]` / `t p` supersedes the hand
 spelling, without compatibility aliases or changed safety/selection behavior.
 Recorder `sources` / `source` retain PulseAudio terminology.
 
-Startup is a muted orientation line with bold `text` title/keys and dot separators,
-not readiness. Active toggle wins; otherwise both start/stop keys are required.
+Startup is a `dim` orientation line with bold `text` title/keys and dot separators,
+not readiness. Each plain span reapplies `dim` after a highlight; help, status and
+processing colors are unchanged. Startup tests check these exact styled spans
+across existing binding/layout cases; live appearance awaits the owner's check.
+Active toggle wins; otherwise both start/stop keys are required.
 Recording shares hint formatting but needs only a stop key when toggle is absent:
 `● REC 00:05 · oaistt · F8 stop · F12 cancel`. Only REC/timer is red; guidance is
 muted with bold neutral brand/keys. Cancellation is independent; unbound/conflicting

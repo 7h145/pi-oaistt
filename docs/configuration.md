@@ -255,7 +255,7 @@ Bare `/oaistt` and `/oaistt status` show identical full status, with a help hint
 without appended status. Request status separately for pending bindings.
 
 The single-line startup tagline uses active shortcuts after binding-conflict checks,
-with a muted base, bold `text`-colored highlights and `·` separators; Pi handles wrapping. A bound toggle
+with a `dim` base, bold `text`-colored highlights and `·` separators; Pi handles wrapping. A bound toggle
 shows “to dictate”; without it, both start and stop must be bound to show their
 hints. An incomplete pair omits dictation. Unbound correction/cancel hints are
 omitted independently. `see /oaistt help` always remains. This is orientation,

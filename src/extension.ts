@@ -170,14 +170,18 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     }
   }
   function startupText(ctx: ExtensionContext): string {
-    const hint = (action: Action, text: string) => keyHint(ctx, activeBindings, action, text);
+    const dim = (text: string) => ctx.ui.theme.fg("dim", text);
+    const hint = (action: Action, text: string) => {
+      const keys = activeBindings[action];
+      return keys.length ? ctx.ui.theme.style(displayKeys(keys), { fg: "text", bold: true }) + dim(` ${text}`) : undefined;
+    };
     const dictation = activeBindings["dictation.toggle"].length ? [hint("dictation.toggle", "to dictate")]
       : activeBindings["dictation.start"].length && activeBindings["dictation.stop"].length
         ? [hint("dictation.start", "to start dictation"), hint("dictation.stop", "to stop dictation")] : [];
     return [
-      `${ctx.ui.theme.style("oaistt", { fg: "text", bold: true })} — speech to text`,
-      ...dictation, hint("editor.correct", "to correct"), hint("operation.cancel", "to cancel"), "see /oaistt help",
-    ].filter(Boolean).join(" · ");
+      ctx.ui.theme.style("oaistt", { fg: "text", bold: true }) + dim(" — speech to text"),
+      ...dictation, hint("editor.correct", "to correct"), hint("operation.cancel", "to cancel"), dim("see /oaistt help"),
+    ].filter(Boolean).join(dim(" · "));
   }
   function recordingText(ctx: ExtensionContext, elapsed: string): string {
     // Recording is already active: a stop binding alone suffices, unlike startup.
@@ -205,7 +209,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     await identityReady;
     if (!live(current)) return;
     installKeys(current);
-    if (current.boundary?.isInstalled() && selection.config) notice(ctx, startupText(ctx));
+    if (current.boundary?.isInstalled() && selection.config && ctx.hasUI) ctx.ui.notify(startupText(ctx), "info");
   });
   const navigation = () => { controller.cancel("session changed"); };
   pi.on("session_before_switch", navigation); pi.on("session_before_fork", navigation);

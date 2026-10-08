@@ -1075,8 +1075,15 @@ for (const fullscreen of [false, true]) for (const row of startupCases) {
     assert.match(rendered, /oaistt — speech to text/); assert.match(rendered, /see\s+\/oaistt\s+help/);
     for (const width of [32, 40, 80, 120]) for (const line of h.mode.chatContainer.render(width)) assert.ok(visibleWidth(line) <= width);
     const prefix = h.ui.theme.style("oaistt", { fg: "text", bold: true }).split("oaistt")[0]!;
-    assert.ok(h.styledNotices.at(-1)!.includes(`${prefix}oaistt`));
-    assert.ok(h.styledNotices.at(-1)!.startsWith(h.ui.theme.getFgAnsi("muted")));
+    const styled = h.styledNotices.at(-1)!;
+    assert.ok(styled.startsWith(`${prefix}oaistt`));
+    assert.ok(styled.includes(h.ui.theme.fg("dim", " — speech to text")));
+    assert.ok(styled.includes(h.ui.theme.fg("dim", " · ")));
+    assert.ok(styled.endsWith(h.ui.theme.fg("dim", "see /oaistt help")));
+    for (const hint of row.hints ? row.hints.split(" · ") : []) {
+      const [, keys, description] = hint.match(/^(.*?) (to .*)$/)!;
+      assert.ok(styled.includes(h.ui.theme.style(keys!, { fg: "text", bold: true }) + h.ui.theme.fg("dim", ` ${description}`)));
+    }
     if (row.name === "defaults") {
       const keyPrefix = h.ui.theme.style("F8", { fg: "text", bold: true }).split("F8")[0]!;
       assert.ok(h.mode.chatContainer.render(120).join("\n").includes(`${keyPrefix}F8`));
