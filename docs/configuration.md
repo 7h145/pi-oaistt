@@ -377,3 +377,10 @@ and reports pending mappings but keeps active native handlers. Commands recover
 configuration/dictation/cancellation independently; F7's buffer path has no naive
 typed-command equivalent. Full reload also reloads current native keybindings before
 checking conflicts; no raw-key takeover is installed.
+
+### Editor replacement
+
+When Pi installs or replaces pi-oaistt's editor, including during full
+`/reload`, draft text is transferred in expanded form. Collapsed pasted blocks
+may become fully visible; their text is preserved. Previous undo history may
+not carry over to the replacement editor.

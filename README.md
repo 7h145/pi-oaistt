@@ -449,9 +449,8 @@ lists active shortcuts; it does not check the microphone or providers.
 - **Settings do not apply:** use `/oaistt reload` for pipeline settings,
   full `/reload` for code/keys, and check settings against the
   [configuration reference](docs/configuration.md).
-- **Another editor is installed:** restore the stock editor and reload.
-  Paste display may expand on editor transfer; editor replacement can
-  change undo history.
+- **Another editor is installed:** disable the extension replacing Pi's
+  editor, then run `/reload`.
 
 ## Development and license
 

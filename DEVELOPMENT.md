@@ -60,6 +60,36 @@ Editor replacement is not seamless undo-history transfer. The adapter refuses to
 replace another custom editor, and refuses delivery after an editor takeover.
 Full reload restores semantic text but may change editor instance/history.
 
+#### Why editor ownership is exclusive
+
+We checked the public API and editor-replacement code in installed Pi **1.0.2**.
+Pi has one active editor factory. `CustomEditor` lets an extension add behavior
+while retaining normal editing and Pi shortcuts. `setEditorComponent()` replaces
+the active factory; `getEditorComponent()` lets cooperating extensions retrieve
+that factory and wrap it. This was a code review, not a compatibility test:
+our implementation and tests still target Pi 0.99.2.
+
+Pi does not automatically combine independently written editors. A wrapper must
+forward methods and callbacks correctly and cooperate with loading, reload and
+shutdown. Replacing an editor normally creates a new instance and copies its
+text, not all of its paste information or undo history. Some public extensions,
+such as
+[pi-editor-shell](https://github.com/d3ara1n/pi-extensions/tree/main/packages/pi-editor-shell),
+explicitly require being the only editor replacement. Our limited public search
+did not find a shared editor-plugin framework; it does not prove none exists.
+
+pi-oaistt must cancel unfinished work before Pi captures a prompt, detect draft
+changes even when they are later undone, and preserve the actual pasted text and
+attachment/path references. It must also prevent a late result from being inserted
+after another extension takes over the editor. Simply wrapping an arbitrary
+editor does not show that these checks will still work.
+
+We therefore require Pi's default editor when installing our adapter and refuse
+to insert results if another editor replaces it. Supporting a particular editor
+would need deliberate cooperation and tests for prompt submission, draft edits,
+paste, undo and reload—not just removal of the existing-editor check. Combining
+arbitrary editor extensions is not currently supported.
+
 ### Owned operations and cleanup
 
 One shared controller owns either dictation or manual correction. Each operation
@@ -162,7 +192,9 @@ Recorder `sources` / `source` retain PulseAudio terminology.
 Startup is a `dim` orientation line with bold `text` title/keys and dot separators,
 not readiness. Each plain span reapplies `dim` after a highlight; help, status and
 processing colors are unchanged. Startup tests check these exact styled spans
-across existing binding/layout cases; live appearance awaits the owner's check.
+across existing binding/layout cases. The owner confirms the dim startup line
+fits Pi's startup, with bold shortcuts still discoverable in the current setup;
+this does not qualify every theme or terminal.
 Active toggle wins; otherwise both start/stop keys are required.
 Recording shares hint formatting but needs only a stop key when toggle is absent:
 `● REC 00:05 · oaistt · F8 stop · F12 cancel`. Only REC/timer is red; guidance is
@@ -245,6 +277,8 @@ profile/model choice and fallbacks, and links whisperer as an optional local-ser
 helper. The configuration reference points to the same correction example.
 Typechecking and all 536 synthetic tests pass on Node 26.10.0 after this
 documentation-only change; no new hardware/provider acceptance is claimed.
+The owner subsequently accepts the README's reading flow; this is editorial
+feedback, not a measured newcomer-usability result.
 
 The owner confirms the nullable-temperature configuration works as expected:
 Codex correction succeeds without an override; explicitly setting
