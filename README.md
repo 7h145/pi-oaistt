@@ -52,7 +52,7 @@ aborting the main agent; Escape keeps its normal Pi behavior.
 - For correction: a model registered in Pi with usable credentials.
 - An API key when the selected transcription service requires one.
 
-Version 0.2.2 is pre-1.0. The tested Pi API baseline is **0.99.2**; further
+Version 0.2.3 is pre-1.0. The tested Pi API baseline is **0.99.2**; further
 microphone and provider checks are still open. See the
 [validation checklist](docs/validation.md) for details.
 

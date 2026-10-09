@@ -256,7 +256,10 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 0.99.2 on Node 26.10.0, with isolated settings. Seven focused list/help/privacy
 checks and typechecking also pass on Node 22.19.0/24.21.0 for the list presentation;
 the subsequent shorthand-only change was checked on Node 26.10.0. The full supported
-runtime matrix was not repeated for these UI/DSL changes. Native UI tests cover
+runtime matrix was not repeated for these UI/DSL changes. The version-only
+0.2.3 bump passed 88 configuration/installation tests and a direct check that
+manifest, lockfile and runtime identity agree; dependencies are unchanged.
+Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
 72-column bullet wrapping: generated heading/bullet/continuation indents are

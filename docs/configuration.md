@@ -299,7 +299,7 @@ it never aborts the main agent. The widget refreshes with the theme and clears
 when processing or ownership ends.
 
 The status header identifies the loaded installation, for example
-`oaistt v0.2.2 (1234abc): idle. Configuration loaded successfully.` Version comes
+`oaistt v0.2.3 (1234abc): idle. Configuration loaded successfully.` Version comes
 from its own `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
 not a guarantee of an unchanged working tree. Git is optional: npm/non-Git installs
 show the version alone. Only Git metadata at the resolved package root is used;
