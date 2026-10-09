@@ -128,10 +128,22 @@ following-only and no-wrap, using fresh multipart bodies over the same validated
 WAV. Successful profile preference is process-local; newer user choices or reloads
 win over held success. Only explicit saves write preferences to configuration.
 
-Correction uses only explicitly ordered Pi model identities, including an explicit
-`$current` selector frozen at operation start. Resolve duplicates at first position
-and restart the order for every operation. The automatic switch never authorizes
-a model, and F7 uses the same order independently. Pi owns routing/credentials;
+Correction uses only explicitly ordered Pi model identities. F7 and dictation
+share a process-local choice: start there, try following entries without wrapping,
+and remember only a successful owned result. Newer manual choice/reselection/save
+or settings reload takes precedence over held success. Settings/full reload reset
+to the saved first entry; automatic fallback never writes configuration.
+
+`/oaistt correction list` reports saved order/default and next candidates.
+`/oaistt correction model SELECTOR [--save]` selects only an ordered entry;
+save moves it to the front without disturbing other settings. These commands do
+not inspect drafts, credentials or provider availability, or change Pi's model.
+The owner-approved C-10 amendment is recorded in the implementation workspace's
+`pathfinder/SPECIFICATION-REVIEW.md`; the original handoff remains unchanged.
+
+An eligible explicit `$current` is frozen at operation start; actual identities
+are deduplicated at their first eligible position. The automatic switch never
+authorizes a model, and F7 works independently of it. Pi owns routing/credentials;
 correction does not inherit main-agent thinking settings or start an agent turn.
 
 Temperature tuning defaults to null: no request option for any API. Section
@@ -227,8 +239,8 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 536 synthetic tests and typechecking pass** against Pi
-0.99.2 on Node 22.19.0/24.21.0, with isolated settings. Native UI tests cover
+**Latest full baseline: 579 synthetic tests and typechecking pass** against Pi
+0.99.2 on Node 22.19.0/24.21.0/26.10.0, with isolated settings. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
 72-column bullet wrapping: generated heading/bullet/continuation indents are
@@ -247,6 +259,18 @@ Correction tests cover both composed prompts, default/explicit mode dispatch,
 JSON isolation, provider mutation/fallback with frozen mode/prompt, and separate
 manual-preserve/STT-trim response handling. They do not evaluate model formatting
 accuracy or spoken-cue interpretation. These checks do not requalify host Pi 1.0.2.
+
+Correction preference coverage includes registered-model timeout/fallback and the
+next request starting at the winner, failure/exhaustion/non-publication, literal
+`$current`, identity deduplication and following-only candidates. Native F7/F8
+tests share the remembered choice across workflows and conversation changes.
+Held-success tests cover newer choice/reselection/save/settings reload, cancel,
+draft edits, prompt capture, takeover and teardown. Save tests preserve newer
+temporary intent, unrelated fields/inactive tuning and private file modes; invalid
+live edits cannot be overwritten. Read-only list/help/status and no-selector usage
+do not inspect drafts or providers, including an ineligible `$current`.
+A fresh-runtime test verifies reset after full reload. This is synthetic API
+evidence, not live correction-fallback/provider quality qualification.
 
 Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen
 settings and newer-choice races. Installed identity covers optional/malformed
@@ -267,7 +291,7 @@ local matrix passes, but a hosted rerun is still needed for CI confirmation.
 | Correction | Automatic/manual with empty/configured/unavailable order, frozen current identity and deduplication, tuning/null/thinking errors, nullable temperature inheritance/overrides and request omission, auth-ready empty-order non-dispatch, deadlines, context exclusions and immutable requests |
 | Recorder | Missing tool subsets, executable-access faults, cancellation, isolated PATH lookup with fake clients, redacted server failures and owned capture/cleanup |
 | STT | Explicit consent, active/inactive profiles, following-only fallback, fresh bodies over identical WAV, auth/response/timeout/size failures and newer-choice races |
-| Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile queue transactions, no implicit writes and failed reload behavior |
+| Config/save | Strict unknown-field and malformed-input rejection, snapshots, private file mode, source/profile/correction queue transactions, no implicit writes and failed reload behavior |
 | UI/keys/tools | Native F7/F8/F12 dispatch, main Escape, coalesced help/status rendering, neutral list-based sections and candidate identities, scoped fallback, no model probes, frozen-versus-next selection, bounded metadata, widget layouts/themes and footer noninterference, pending keys and exact aliases |
 | Loader/reload | Public discovery/jiti/runner, reset-before-shutdown, fresh-runtime key registration and semantic editor transfer |
 | Documentation | Runnable JSON examples, exact default settings and explicit example order |
@@ -275,9 +299,7 @@ local matrix passes, but a hosted rerun is still needed for CI confirmation.
 The README review simplifies workflow wording and UI detail, explains the current
 profile/model choice and fallbacks, and links whisperer as an optional local-server
 helper. The configuration reference points to the same correction example.
-Typechecking and all 536 synthetic tests pass on Node 26.10.0 after this
-documentation-only change; no new hardware/provider acceptance is claimed.
-The owner subsequently accepts the README's reading flow; this is editorial
+The owner accepts the README's reading flow; this is editorial
 feedback, not a measured newcomer-usability result.
 
 The owner confirms the nullable-temperature configuration works as expected:

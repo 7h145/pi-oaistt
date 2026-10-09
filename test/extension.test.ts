@@ -106,7 +106,8 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
   const actualCorrection = options.correction;
   const result = registerDictation(pi, {
     identity: options.identity ?? (async () => ({ version: "0.2.0" })),
-    store: options.store ?? { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {}, saveProfile: async () => {} },
+    store: options.store ?? { load: async () => { loads++; return config; }, setSource: (source) => { config = structuredClone(config); config.recorder.source = source; }, saveSource: async () => {}, saveProfile: async () => {},
+      saveCorrectionModel: async selector => { config = structuredClone(config); config.correction.order = [selector, ...config.correction.order.filter(name => name !== selector)]; } },
     prepare: async () => new Uint8Array(), key: () => undefined, clock: () => clock,
     sources: options.sources ?? (async () => []),
     record: (config, signal) => { captures++; signals.push(signal); settings.push(config);
@@ -137,7 +138,7 @@ function harness(options: { mode?: ExtensionContext["mode"]; streaming?: boolean
     start: async () => { await emit("session_start", { reason: "startup" }); native.mode.setupExtensionShortcuts({ getModelRegistry: () => ctx.modelRegistry, getShortcuts: () => shortcuts as any }); },
     tools, targets, correctionOptions,
     setModel: (model: ExtensionContext["model"]) => { selectedModel = model; },
-    selection: result.selection,
+    selection: result.selection, correctionSelection: result.correctionSelection,
     f7: () => native.terminal.send("\x1b[18~"),
     f12: () => native.terminal.send("\x1b[24~"),
     command: (args: string) => command.handler(args, ctx as ExtensionCommandContext),
@@ -594,7 +595,7 @@ test("legitimate STT sticky preference survives later correction cancellation", 
 test("failed settings reload blocks new work but allows owned frozen manual result", async () => {
   let failure = false;
   const config = parseConfig({});
-  const h = harness({ store: { load: async () => { if (failure) throw new (await import("../src/config.ts")).ConfigError("Synthetic invalid configuration."); return config; }, setSource: () => {}, saveSource: async () => {}, saveProfile: async () => {} } });
+  const h = harness({ store: { load: async () => { if (failure) throw new (await import("../src/config.ts")).ConfigError("Synthetic invalid configuration."); return config; }, setSource: () => {}, saveSource: async () => {}, saveProfile: async () => {}, saveCorrectionModel: async () => {} } });
   await h.start(); h.ui.setEditorText("draft"); h.f7(); await nextTask(); failure = true; await h.command("rl");
   assert.equal(h.signals[0]!.aborted, false); h.edited.resolve({ kind: "corrected", text: "corrected" }); await h.controller.settled();
   assert.equal(h.ui.getEditorText(), "corrected"); h.f8(); await nextTask(); assert.equal(h.counts().captures, 0);
@@ -626,7 +627,7 @@ test("dictation thinking error is red plus guarded raw, not ordinary exhaustion 
 test("new temporary/reselected choice wins while an earlier explicit save is held", async () => {
   const wait = deferred<void>(); let savedName: string | undefined; let disk = profilesConfig();
   const h = harness({ store: { load: async () => disk, setSource: () => {}, saveSource: async () => {},
-    saveProfile: async name => { savedName = name; await wait.promise; disk = structuredClone(disk); disk.transcription.order = [name, ...disk.transcription.order.filter(n => n !== name)]; } } });
+    saveProfile: async name => { savedName = name; await wait.promise; disk = structuredClone(disk); disk.transcription.order = [name, ...disk.transcription.order.filter(n => n !== name)]; }, saveCorrectionModel: async () => {} } });
   await h.start(); const saving = h.command("t p remote --save"); await nextTask();
   await h.command("t p local"); wait.resolve(); await saving;
   assert.equal(savedName, "remote"); assert.equal(h.selection.selected, "local"); assert.equal(h.selection.metadata().default, "remote");
@@ -654,15 +655,15 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     assert.ok(text.includes("oaistt never submits a prompt on its own."));
     assert.ok(text.includes("Draft correction needs a correction model; none is configured."));
     const sections = ["Controls:", "Abbreviations appear in parentheses:", "Dictation:", "Transcription:",
-      "Capture device:", "Settings and help:", "Notes:"];
+      "Correction:", "Capture device:", "Settings and help:", "Notes:"];
     const positions = sections.map(section => text.indexOf(section));
     assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
     assert.match(text, /\(d t\) means \/oaistt d t/);
     assert.match(text, /transcription profile NAME \[--save\] \(t p\)/);
     const heading = "Notes:", notes = [
-      " • Without NAME, source/profile commands show the current selection and",
-      "   usage without changing it.",
-      " • Device/profile choices are temporary. Add --save to keep a choice in",
+      " • Without a name or selector, selection commands show the current",
+      "   choice and usage without changing it.",
+      " • Input/profile/model choices are temporary. Add --save to keep them in",
       "   configuration. Host audio settings remain unchanged.",
       " • Settings reload affects subsequent work only. Active dictation or",
       "   correction stays unchanged.",
@@ -887,7 +888,7 @@ for (const fullscreen of [false, true]) test(`status has neutral headings, order
     await h.command(args);
     const text = h.notices.at(-1)!;
     assert.equal(statusSection(text, "Transcription"), "  Active:   none\n  Default:  local\n  Fallback: on\n  Profiles, in order:\n    • local\n    • remote");
-    assert.equal(statusSection(text, "Correction"), "  Automatic: on\n  Models, in order:\n    • fixture/first\n    • $current (fixture/main)\n    • fixture/last/slashed/語");
+    assert.equal(statusSection(text, "Correction"), "  Automatic: on\n  Selected: fixture/first\n  Default: fixture/first\n  Models, in order:\n    • fixture/first\n    • $current (fixture/main)\n    • fixture/last/slashed/語");
     assert.match(text, /Capture device:\s+server default source/);
     const titles = ["Transcription", "Correction", "Capture device", "Active keys"];
     const positions = titles.map(title => text.indexOf(`${title}:`));
@@ -924,7 +925,7 @@ test("status shows the selected capture device alongside disabled transcription 
   assert.match(statusSection(h.notices.at(-1)!, "Transcription"), /Fallback: off/);
   assert.doesNotMatch(h.notices.at(-1)!, /^Fallback:/m);
   assert.match(h.notices.at(-1)!, /Capture device:\s+fixture\.capture\.source/);
-  assert.match(statusSection(h.notices.at(-1)!, "Correction"), /Automatic: on\n  Models, in order:\n    none \(no requests\)/);
+  assert.match(statusSection(h.notices.at(-1)!, "Correction"), /Automatic: on\n  Selected: none\n  Default: none\n  Models, in order:\n    none \(no requests\)/);
   assert.doesNotMatch(h.notices.at(-1)!, /Recorder:|next capture:/);
 });
 
@@ -941,7 +942,7 @@ test("status marks missing current model and unavailable config without claiming
   assert.match(h.notices.at(-1)!, /\$current \(unavailable\)/);
   h.selection.reset(); await h.command("status");
   assert.match(h.notices.at(-1)!, /Configuration unavailable/);
-  assert.match(statusSection(h.notices.at(-1)!, "Correction"), /Automatic: unavailable\n  Models, in order:\n    unavailable/);
+  assert.match(statusSection(h.notices.at(-1)!, "Correction"), /Automatic: unavailable\n  Selected: unavailable\n  Default: unavailable\n  Models, in order:\n    unavailable/);
   assert.match(statusSection(h.notices.at(-1)!, "Transcription"), /Default:  unavailable\n  Fallback: unavailable\n  Profiles, in order:\n    unavailable/);
   assert.match(h.notices.at(-1)!, /Capture device:\s+unavailable/);
   assert.doesNotMatch(h.notices.at(-1)!, /Automatic: off|server default source|loaded successfully/);
@@ -1233,3 +1234,130 @@ for (const fullscreen of [false, true]) for (const mode of processingModes) for 
     assert.equal(h.counts().captures, mode.manual ? 0 : 1);
   });
 }
+
+function correctionConfig(): Config {
+  const config = profilesConfig();
+  config.correction.order = ["fixture/one", "$current", "fixture/three"];
+  config.correction.automatic = true;
+  config.correction.modelSettings["fixture/inactive"] = { thinkingLevel: null, temperature: null, attemptTimeoutSeconds: 15 };
+  return config;
+}
+
+for (const firstManual of [false, true]) test(`native F7 and dictation share sticky correction after fallback: firstManual=${firstManual}`, async () => {
+  const h = harness({ correction: realCorrect }); h.setConfig(correctionConfig());
+  const provider = fauxProvider({ provider: "fixture", models: [{ id: "one" }, { id: "two" }, { id: "three" }] });
+  const requests: string[] = [];
+  h.setModel(provider.getModel("two"));
+  h.ctx.modelRegistry = {
+    find: (name: string, id: string) => name === "fixture" ? provider.getModel(id) : undefined,
+    streamSimple: (model: { id: string }) => {
+      requests.push(model.id);
+      return { result: async () => { if (model.id === "one") throw new Error("synthetic failure"); return fauxAssistantMessage("corrected synthetic"); } } as AssistantMessageEventStream;
+    },
+  } as unknown as ModelRegistry;
+  await h.start();
+  async function invoke(manual: boolean) {
+    h.ui.setEditorText(manual ? "synthetic draft" : "");
+    if (manual) h.f7();
+    else { h.f8(); await nextTask(); h.f8(); h.raw.resolve("synthetic speech"); }
+    await h.controller.settled();
+    assert.equal(h.ui.getEditorText(), "corrected synthetic");
+  }
+  await invoke(firstManual);
+  assert.equal(h.correctionSelection.selected, "$current");
+  await h.emit("session_before_switch"); await h.start();
+  assert.equal(h.correctionSelection.selected, "$current");
+  await invoke(!firstManual);
+  assert.deepEqual(requests, ["one", "two", "two"]);
+  assert.deepEqual(h.correctionOptions.map(options => options.selected), ["fixture/one", "$current"]);
+  assert.deepEqual(h.selection.config!.correction.order, ["fixture/one", "$current", "fixture/three"]);
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+});
+
+for (const newer of ["choice", "same-selector", "settings reload", "explicit save", "cancel", "draft edit", "prompt capture", "takeover", "full reload"] as const)
+  test(`held correction cannot overwrite preference after ${newer}`, async () => {
+    const h = harness(); h.setConfig(correctionConfig()); await h.start();
+    h.ui.setEditorText("synthetic draft"); h.f7(); await nextTask();
+    const held = h.correctionOptions[0];
+    assert.equal(held.selected, "fixture/one");
+    if (newer === "choice") await h.command("correction model fixture/three");
+    if (newer === "same-selector") await h.command("correction model fixture/one");
+    if (newer === "settings reload") await h.command("reload");
+    if (newer === "explicit save") await h.command("correction model fixture/three --save");
+    if (newer === "cancel") await h.command("cancel");
+    if (newer === "draft edit") h.terminal.send("x");
+    if (newer === "prompt capture") { h.terminal.send("\r"); h.ui.setEditorText("synthetic draft"); }
+    if (newer === "takeover") h.ui.setEditorComponent(() => h.mode.defaultEditor);
+    if (newer === "full reload") await h.emit("session_shutdown", { reason: "reload" });
+    held.succeeded("$current");
+    assert.equal(h.correctionSelection.selected, newer === "choice" || newer === "explicit save" ? "fixture/three" : "fixture/one");
+    assert.equal(held.selected, "fixture/one");
+    assert.deepEqual(h.settings[0]!.correction.order, ["fixture/one", "$current", "fixture/three"]);
+    h.edited.resolve({ kind: "corrected", text: "corrected synthetic" }); await h.controller.settled();
+    assert.equal(h.main.signal.aborted, false);
+    if (["choice", "same-selector", "settings reload", "explicit save"].includes(newer)) assert.equal(h.ui.getEditorText(), "corrected synthetic");
+  });
+
+test("a legitimate correction preference is not undone by later cancellation", async () => {
+  const h = harness(); h.setConfig(correctionConfig()); await h.start(); h.ui.setEditorText("synthetic draft");
+  h.f7(); await nextTask(); h.correctionOptions[0].succeeded("$current");
+  await h.command("cancel"); h.edited.resolve({ kind: "corrected", text: "obsolete synthetic" }); await h.controller.settled();
+  assert.equal(h.correctionSelection.selected, "$current"); assert.equal(h.ui.getEditorText(), "synthetic draft");
+});
+
+test("correction list/help/status and no-selector usage are read-only and skip ineligible $current", async () => {
+  const h = harness({ sources: async () => { throw new Error("must not query audio"); } });
+  h.setConfig(correctionConfig()); await h.start(); await h.command("correction model fixture/three");
+  Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("ineligible main identity must not be read"); } });
+  h.ctx.modelRegistry = { find: () => { throw new Error("must not probe providers"); } } as unknown as ModelRegistry;
+  const readDraft = h.ui.getEditorText;
+  h.ui.getEditorText = () => { throw new Error("must not read draft"); };
+  const counts = h.counts(), generation = h.correctionSelection.generation;
+  await h.command("correction list");
+  assert.deepEqual(JSON.parse(h.notices.at(-1)!), { selected: "fixture/three", next: "fixture/three", default: "fixture/one", automatic: true,
+    order: ["fixture/one", "$current", "fixture/three"], candidates: ["fixture/three"] });
+  await h.command("correction model"); assert.match(h.notices.at(-1)!, /Next correction model: fixture\/three.*SELECTOR/);
+  await h.command("status"); assert.equal(statusSection(h.notices.at(-1)!, "Correction"),
+    "  Automatic: on\n  Selected: fixture/three\n  Default: fixture/one\n  Models, in order:\n    • fixture/three");
+  const highlight = h.ui.theme.style("fixture/three", { fg: "text", bold: true });
+  assert.ok(h.styledNotices.at(-1)!.includes(highlight));
+  await h.command("help"); assert.match(h.notices.at(-1)!, /Correction:\n.*draft and dictation correction.*\n.*fixture\/three/s);
+  assert.match(h.notices.at(-1)!, /\/oaistt correction list/); assert.match(h.notices.at(-1)!, /\/oaistt correction model SELECTOR \[--save\]/);
+  assert.deepEqual(h.counts(), counts); assert.equal(h.correctionSelection.generation, generation);
+  assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0); assert.equal(h.promptCalls.length, 0);
+  h.ui.getEditorText = readDraft;
+});
+
+for (const args of ["correction list extra", "correction model --save", "correction model fixture/one extra", "correction model fixture/one --save extra",
+  "correction model fixture/inactive", "correction model missing/model", "c list", "correction model fixture/one --unknown"])
+  test(`invalid correction command cannot activate a model: ${args}`, async () => {
+    const h = harness(); h.setConfig(correctionConfig()); await h.start(); const token = h.correctionSelection.snapshot();
+    await h.command(args); assert.equal(h.categories.at(-1), "error"); assert.deepEqual(h.correctionSelection.snapshot(), token);
+    assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0);
+  });
+
+test("correction save promotes literal $current; settings/full reload reset temporary preference", async () => {
+  const h = harness(); h.setConfig(correctionConfig()); await h.start();
+  let mainReads = 0;
+  Object.defineProperty(h.ctx, "model", { get: () => { mainReads++; return undefined; } });
+  await h.command("correction model $current --save"); assert.equal(mainReads, 0);
+  assert.deepEqual(h.selection.config!.correction.order, ["$current", "fixture/one", "fixture/three"]);
+  await h.command("correction model fixture/three"); await h.command("reload"); assert.equal(h.correctionSelection.selected, "$current");
+  await h.command("correction model fixture/three");
+  const saved = structuredClone(h.selection.config!);
+  await h.emit("session_shutdown", { reason: "reload" });
+  const fresh = harness(); fresh.setConfig(saved); await fresh.start();
+  assert.equal(fresh.correctionSelection.selected, "$current");
+});
+
+for (const reselect of [false, true]) test(`held correction save preserves newer temporary choice/reselection: ${reselect}`, async () => {
+  let disk = correctionConfig(); const hold = deferred<void>();
+  const h = harness({ store: { load: async () => disk, setSource: () => {}, saveSource: async () => {}, saveProfile: async () => {},
+    saveCorrectionModel: async selector => { await hold.promise; disk = structuredClone(disk); disk.correction.order = [selector, ...disk.correction.order.filter(name => name !== selector)]; } } });
+  await h.start(); const save = h.command("correction model $current --save"); await nextTask();
+  await h.command(`correction model ${reselect ? "$current" : "fixture/three"}`);
+  hold.resolve(); await save;
+  assert.equal(h.correctionSelection.selected, reselect ? "$current" : "fixture/three");
+  assert.equal(h.selection.config!.correction.order[0], "$current");
+  await h.command("reload"); assert.equal(h.correctionSelection.selected, "$current");
+});

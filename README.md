@@ -135,8 +135,8 @@ Equivalent dictation and cancellation commands are:
 
 Use **`/oaistt`** or **`/oaistt status`** to see what's running, which
 transcription profiles and correction models will be tried, the recording
-input, and active or pending shortcuts. Bold marks the current choice
-for the next run; later entries are fallbacks.
+input, and active or pending shortcuts. Bold marks the first profile or
+model to try on the next run; later entries are fallbacks.
 
 **`/oaistt help`** lists commands, aliases, active shortcuts and correction
 setup.
@@ -210,8 +210,20 @@ then run **`/oaistt reload`**. To use this list for F7 only, change
 
 `"$current"` uses the Pi model selected when you start dictation or press
 F7. The request does not inherit the main agent's thinking level. If both
-entries resolve to the same model, it is tried only once. Each correction
-starts at the top of the list and stops at the first successful response.
+entries resolve to the same model, it is tried only once.
+
+Correction starts with the selected entry, tries following entries if
+needed, and stops at the first success. The successful choice becomes
+the starting point for both F7 and dictation. It can advance again after
+another fallback; reload restores the saved first entry. Automatic
+fallback never changes your saved configuration or wraps to earlier entries.
+
+Use **`/oaistt correction list`** to see the saved order and next choices.
+Select an entry already in the list with
+**`/oaistt correction model SELECTOR`**, where `SELECTOR` is a
+`provider/model` or `$current`. Add `--save` to make it the saved first
+choice. Work already running keeps its original choice. This does not
+change Pi's main model.
 
 If no model succeeds—including when the list is empty—automatic dictation
 inserts the raw transcription with a notice. F7 leaves the draft unchanged.

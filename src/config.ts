@@ -218,6 +218,14 @@ export class ConfigStore {
     if (source === undefined) throw new ConfigError("No temporary source override to save.");
     await this.#save(raw => ({ ...raw, recorder: { ...object(fallback(raw.recorder, {}), "recorder"), source } }));
   }
+  async saveCorrectionModel(selector: string): Promise<void> {
+    await this.#save(raw => {
+      const config = parseConfig(raw);
+      if (!config.correction.order.includes(selector)) throw new ConfigError("Unknown or inactive correction model selector.");
+      const correction = object(fallback(raw.correction, {}), "correction");
+      return { ...raw, correction: { ...correction, order: [selector, ...config.correction.order.filter(name => name !== selector)] } };
+    });
+  }
   async saveProfile(name: string): Promise<void> {
     profileName(name);
     await this.#save(raw => {

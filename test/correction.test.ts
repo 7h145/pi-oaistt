@@ -18,6 +18,7 @@ import { ModelRegistry, ModelRuntime, SessionManager } from "@earendil-works/pi-
 import { InMemoryCredentialStore, fauxAssistantMessage, fauxProvider, fauxText, fauxThinking, fauxToolCall,
   type Context, type AssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { parseConfig } from "../src/config.ts";
+import { CorrectionSelection } from "../src/correction-selection.ts";
 import { correct, correctionContext, MANUAL_CORRECTION_PROMPT, STT_CORRECTION_PROMPT } from "../src/correction.ts";
 
 function session() { return SessionManager.inMemory("/synthetic"); }
@@ -177,7 +178,7 @@ for (const invalid of [
   });
 }
 
-test("disabled/empty candidate list makes no context or provider calls; each dictation retries list", async () => {
+test("disabled/empty order makes no calls; standalone correction starts at the first entry", async () => {
   const h = registryFixture(["throw", fauxAssistantMessage("success"), fauxAssistantMessage("first candidate recovered")]);
   const source = { buildSessionProjection: () => { throw new Error("must not access history"); } };
   const disabled = parseConfig({ correction: { automatic: false, order: ["fixture/one"] } });
@@ -442,3 +443,68 @@ for (const current of [false, true]) {
     assert.deepEqual(reasons, ["provider failure"]);
   });
 }
+
+for (const manual of [false, true]) test(`registered timeout remembers a successful fallback: manual=${manual}`, async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = registryFixture(["hang", fauxAssistantMessage("first success"), fauxAssistantMessage("next success")]);
+  h.config.correction.order = ["fixture/one", "fixture/two/slashed"];
+  h.config.correction.defaults.attemptTimeoutSeconds = 1;
+  const choice = new CorrectionSelection(); choice.reset(h.config);
+  const invoke = () => {
+    const token = choice.snapshot();
+    return correct("synthetic draft", h.config, new AbortController().signal, session(), h.registry, {
+      manual, selected: token.selected, succeeded: selector => { choice.publish(token, selector); },
+    });
+  };
+  const first = invoke(); await nextTask(); t.mock.timers.tick(1000);
+  assert.deepEqual(await first, { kind: "corrected", text: "first success" });
+  assert.equal(choice.selected, "fixture/two/slashed");
+  assert.equal(h.calls[0]!.signal.aborted, true);
+  assert.deepEqual(await invoke(), { kind: "corrected", text: "next success" });
+  assert.deepEqual(h.calls.map(call => call.model), ["one", "two/slashed", "two/slashed"]);
+  assert.deepEqual(h.config.correction.order, ["fixture/one", "fixture/two/slashed"]);
+});
+
+test("selected correction starts in the middle, never wraps, and exhaustion never publishes", async () => {
+  const h = registryFixture(["throw"]); let publications = 0;
+  assert.deepEqual(await correct("synthetic draft", h.config, new AbortController().signal, session(), h.registry,
+    { manual: true, selected: "fixture/two/slashed", succeeded: () => { publications++; } }), { kind: "exhausted" });
+  assert.deepEqual(h.calls.map(call => call.model), ["two/slashed"]);
+  assert.equal(publications, 0);
+  assert.deepEqual(await correct("synthetic draft", h.config, new AbortController().signal,
+    { buildSessionProjection: () => { throw new Error("must not read context"); } }, h.registry,
+    { selected: "unlisted/model", succeeded: () => { publications++; } }), { kind: "exhausted" });
+  assert.equal(h.calls.length, 1);
+});
+
+test("current selector remains a selector after success and alias identity is tried once", async () => {
+  const h = registryFixture([fauxAssistantMessage("success")]); const winners: string[] = [];
+  h.config.correction.order = ["$current", "fixture/one", "fixture/two/slashed"];
+  await correct("synthetic draft", h.config, new AbortController().signal, session(), h.registry, {
+    current: { provider: "fixture", id: "one" }, succeeded: selector => winners.push(selector),
+  });
+  assert.deepEqual(winners, ["$current"]);
+  assert.deepEqual(h.calls.map(call => call.model), ["one"]);
+});
+
+for (const invalid of ["throw", fauxAssistantMessage(""), fauxAssistantMessage("partial", { stopReason: "length" })] as const) {
+  test("failed correction response never publishes a remembered choice", async () => {
+    const h = registryFixture([invalid]); let publications = 0;
+    h.config.correction.order = ["fixture/one"];
+    assert.deepEqual(await correct("synthetic draft", h.config, new AbortController().signal, session(), h.registry,
+      { succeeded: () => { publications++; } }), { kind: "exhausted" });
+    assert.equal(publications, 0);
+  });
+}
+
+test("ownership lost after provider completion prevents correction preference publication", async () => {
+  const h = registryFixture([fauxAssistantMessage("late success")]); let owned = true, publications = 0;
+  const stream = h.registry.streamSimple;
+  h.registry.streamSimple = (model, context, options) => {
+    const result = stream(model, context, options); owned = false; return result;
+  };
+  await assert.rejects(correct("synthetic draft", h.config, new AbortController().signal, session(), h.registry, {
+    isCurrent: () => owned, succeeded: () => { publications++; },
+  }));
+  assert.equal(publications, 0);
+});

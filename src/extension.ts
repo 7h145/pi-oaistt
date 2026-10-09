@@ -13,6 +13,7 @@
 
 import { Type } from "@earendil-works/pi-ai";
 import { ProfileSelection, safeLabel } from "./profiles.ts";
+import { CorrectionSelection, correctionCandidates } from "./correction-selection.ts";
 import { loadInstallationIdentity, installationLabel, type InstallationIdentity } from "./version.ts";
 import { ACTIONS, DEFAULT_BINDINGS, nativeSafe, type Action, type Bindings } from "./keys.ts";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -24,7 +25,7 @@ import { recordParecord, listRecordingSources } from "./recorder.ts";
 import { transcribe, prepareAudio, transcriptionChain, transcriptionCandidates, TranscriptionFailure } from "./transcription.ts";
 
 export const WIDGET_KEY = "pi-oaistt";
-const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/profile NAME [--save] | reload. Key changes require full Pi /reload.";
+const USAGE = "Defaults: F8 dictation toggle; F7 correct draft; F12 cancel. /oaistt help | status | dictation toggle/start/stop | cancel | recorder sources/source NAME [--save] | transcription list/profile NAME [--save] | correction list/model SELECTOR [--save] | reload. Key changes require full Pi /reload.";
 const displayKeys = (keys: string[]): string => keys.map(key => key.split("+").map(part =>
   /^f\d+$/u.test(part) || part.length <= 1 ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1),
 ).join("+")).join(" / ") || "unbound";
@@ -37,7 +38,7 @@ const CONTROL_DESCRIPTIONS: Record<Action, string> = {
   "dictation.toggle": "Start or stop dictation", "editor.correct": "Correct the current draft",
   "operation.cancel": "Cancel oaistt", "dictation.start": "Start recording", "dictation.stop": "Stop and transcribe",
 };
-type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile">;
+type Store = Pick<ConfigStore, "load" | "setSource" | "saveSource" | "saveProfile" | "saveCorrectionModel">;
 export interface Dependencies {
   identity: () => Promise<InstallationIdentity>;
   store: Store; record: Pipeline["record"]; transcribe: typeof transcribe; correct: typeof correct;
@@ -106,7 +107,7 @@ class Feedback {
 export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependencies> = {}) {
   const deps: Dependencies = { identity: loadInstallationIdentity, store: new ConfigStore(getAgentDir()), record: recordParecord, transcribe, correct,
     key: transcriptionKey, prepare: prepareAudio, sources: listRecordingSources, clock: () => performance.now(), ...overrides };
-  const controller = new OperationController(), selection = new ProfileSelection();
+  const controller = new OperationController(), selection = new ProfileSelection(), correctionSelection = new CorrectionSelection();
   let scope: Scope | undefined, owner: DeliveryOwner | undefined;
   let initialized = false, keysInstalled = false, changing = 0, reloading = 0, epoch = 0, configError: string | undefined;
   let activeBindings: Bindings = structuredClone(DEFAULT_BINDINGS);
@@ -130,15 +131,15 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
   };
   async function load(ctx: ExtensionContext): Promise<void> {
     const candidate = scope;
-    const request = ++epoch; selection.invalidate(); changing++; reloading++;
+    const request = ++epoch; selection.invalidate(); correctionSelection.invalidate(); changing++; reloading++;
     try {
       const config = await deps.store.load();
       if (request !== epoch) return;
-      selection.reset(config); configError = undefined;
+      selection.reset(config); correctionSelection.reset(config); configError = undefined;
       if (candidate && live(candidate)) for (const message of config.keyErrors) error(ctx, message);
     } catch (cause) {
       if (request !== epoch) return;
-      selection.reset(); configError = configFailure(cause); if (candidate && live(candidate)) error(ctx, configError);
+      selection.reset(); correctionSelection.reset(); configError = configFailure(cause); if (candidate && live(candidate)) error(ctx, configError);
     } finally { changing--; reloading--; }
   }
   async function teardown(reason: "shutdown" | "session changed"): Promise<void> {
@@ -231,10 +232,10 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     if (!config) { error(ctx, configError ?? "oaistt configuration unavailable."); return; }
     const manual = action === "editor.correct";
     if (manual && !ctx.ui.getEditorText().trim()) { notice(ctx, "Nothing to correct."); return; }
-    const token = selection.snapshot();
-    // Read the main identity ONLY for an explicitly listed selector. Never its
-    // thinking level, settings, prompt or implicit fallback/authentication.
-    const selectedModel = config.correction.order.includes("$current") ? ctx.model : undefined;
+    const token = selection.snapshot(), correctionToken = correctionSelection.snapshot();
+    // Read the main identity only for an explicitly listed, eligible selector.
+    // Never read its thinking level, settings, prompt or implicit fallback/auth.
+    const selectedModel = correctionCandidates(config, correctionToken.selected).includes("$current") ? ctx.model : undefined;
     const currentModel = selectedModel && { provider: selectedModel.provider, id: selectedModel.id };
     let resultFinished = false, lostEditorNotice = false;
     const delivery: DeliveryOwner = {
@@ -276,6 +277,8 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       },
       correct: (target, frozen, signal, kind) => deps.correct(target, frozen, signal, ctx.sessionManager, ctx.modelRegistry, {
         manual: kind === "manual", current: currentModel, isCurrent: stillOwned,
+        selected: correctionToken.selected,
+        succeeded: selector => { if (!signal.aborted && stillOwned()) correctionSelection.publish(correctionToken, selector); },
         warning: (failed, reason, next) => warning("Correction", signal, failed, reason, next),
       }),
     };
@@ -289,15 +292,30 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     });
   }
 
+  function savedSelections(config: Config): void {
+    selection.saved(config, selection.generation);
+    correctionSelection.saved(config, correctionSelection.generation);
+  }
   async function select(name: string, save: boolean): Promise<void> {
     if (reloading) throw new ConfigError("oaistt configuration is loading; retry shortly.");
     selection.select(name); // Includes same-name intent before any awaited save.
     if (!save) return;
-    const request = ++epoch; selection.invalidate(); changing++;
+    const request = ++epoch; selection.invalidate(); correctionSelection.invalidate(); changing++;
     try {
       await deps.store.saveProfile(name);
       const config = await deps.store.load();
-      if (request === epoch) selection.saved(config, selection.generation);
+      if (request === epoch) savedSelections(config);
+    } finally { changing--; }
+  }
+  async function selectCorrection(selector: string, save: boolean): Promise<void> {
+    if (reloading || !selection.config) throw new ConfigError("oaistt configuration is loading/unavailable.");
+    correctionSelection.select(selector);
+    if (!save) return;
+    const request = ++epoch; selection.invalidate(); correctionSelection.invalidate(); changing++;
+    try {
+      await deps.store.saveCorrectionModel(selector);
+      const config = await deps.store.load();
+      if (request === epoch) savedSelections(config);
     } finally { changing--; }
   }
   function statusText(ctx: ExtensionContext): string {
@@ -312,9 +330,10 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     // Preview next-operation candidates, not live attempts or proven availability.
     // Share following-only STT order with dispatch; $current alone authorizes identity access.
     const profiles = config && selection.selected ? transcriptionCandidates(config, selection.selected).map(safeLabel) : [];
-    const model = config?.correction.order.includes("$current") ? ctx.model : undefined;
-    const models = config?.correction.order.map(selector => selector === "$current"
-      ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})` : safeLabel(selector)) ?? [];
+    const modelOrder = config ? correctionCandidates(config, correctionSelection.selected) : [];
+    const model = modelOrder.includes("$current") ? ctx.model : undefined;
+    const models = modelOrder.map(selector => selector === "$current"
+      ? `$current (${model ? safeLabel(`${model.provider}/${model.id}`) : "unavailable"})` : safeLabel(selector));
     const activeSource = controller.captureSource;
     const source = activeSource === undefined ? config?.recorder.source : activeSource;
     const lines = [
@@ -326,6 +345,8 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       "  Profiles, in order:", ...candidates(profiles, "unavailable"), "",
       strong("Correction:"),
       `  Automatic: ${config ? config.correction.automatic ? "on" : "off" : "unavailable"}`,
+      `  Selected: ${config ? correctionSelection.selected ? safeLabel(correctionSelection.selected) : "none" : "unavailable"}`,
+      `  Default: ${config ? config.correction.order[0] ? safeLabel(config.correction.order[0]) : "none" : "unavailable"}`,
       "  Models, in order:", ...candidates(models, config ? "none (no requests)" : "unavailable"), "",
       strong("Capture device:"),
       `  ${source === undefined ? "unavailable" : source === null ? "server default source" : safeLabel(source)}`, "",
@@ -351,9 +372,8 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
         ? "" : ` (default: ${displayKeys(DEFAULT_BINDINGS[action])})`;
       return `  ${strong(keys)}${" ".repeat(Math.max(2, 7 - keys.length))}${CONTROL_DESCRIPTIONS[action]}${defaults}`;
     });
-    const config = selection.config, first = config?.correction.order[0];
-    // The compact preview names only the first configured selector, not a proven
-    // usable model. Separate status retains the complete next-operation order.
+    const config = selection.config, first = correctionSelection.selected;
+    // Show the next choice without checking provider availability.
     const model = first === "$current" ? ctx.model : undefined;
     const correction = !config ? "Draft correction: configuration unavailable." : !first
       ? "Draft correction needs a correction model; none is configured."
@@ -363,7 +383,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       strong("oaistt — speech to text and draft correction"), "",
       "Dictate into Pi’s prompt draft, or correct text already there.",
       "Review the result before sending; oaistt never submits a prompt on its own.", "",
-      strong("Controls:"), ...controls, "", `  ${correction}`, "",
+      strong("Controls:"), ...controls, "",
       "Abbreviations appear in parentheses: (d t) means /oaistt d t.", "",
       strong("Dictation:"),
       command("/oaistt dictation toggle (d t)", "Start, or stop and transcribe"),
@@ -374,6 +394,11 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       command("/oaistt transcription list (t l)", "Show profiles and fallback policy"),
       command("/oaistt transcription profile NAME [--save] (t p)"),
       "    Select a profile for subsequent dictation.", "",
+      strong("Correction:"), "  Choose a model for draft and dictation correction.",
+      `  ${correction}`, "",
+      command("/oaistt correction list", "Show model choices and fallback order"),
+      command("/oaistt correction model SELECTOR [--save]"),
+      "    Select a configured provider/model or $current entry.", "",
       strong("Capture device:"), "  Choose the microphone or other recording input.", "",
       command("/oaistt recorder sources (r l)", "List available inputs"),
       command("/oaistt recorder source NAME [--save] (r s)"),
@@ -385,9 +410,9 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       command("/oaistt reload (rl)", "Reload settings for subsequent work"), "",
       strong("Notes:"),
       // Pi adds outer padding: keep the heading flush left and bullets under its o.
-      " • Without NAME, source/profile commands show the current selection and",
-      "   usage without changing it.",
-      " • Device/profile choices are temporary. Add --save to keep a choice in",
+      " • Without a name or selector, selection commands show the current",
+      "   choice and usage without changing it.",
+      " • Input/profile/model choices are temporary. Add --save to keep them in",
       "   configuration. Host audio settings remain unchanged.",
       " • Settings reload affects subsequent work only. Active dictation or",
       "   correction stays unchanged.",
@@ -416,6 +441,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       return;
     }
     if (action === "transcription list") { notice(ctx, JSON.stringify(selection.metadata(activeProfile))); return; }
+    if (action === "correction list") { notice(ctx, JSON.stringify(correctionSelection.metadata(selection.config))); return; }
     if (action === "recorder sources") {
       try { const sources = await deps.sources(current.abort.signal); if (live(current)) notice(ctx, JSON.stringify(sources)); }
       catch (failure) {
@@ -425,9 +451,11 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       return;
     }
     const group = (p[0] === "recorder" && p[1] === "source" || p[0] === "r" && p[1] === "s") ? "recorder"
-      : (p[0] === "transcription" && p[1] === "profile" || p[0] === "t" && p[1] === "p") ? "transcription" : undefined;
-    if (!["recorder", "transcription"].includes(group ?? "") || p.length > 4 || p.length === 4 && p[3] !== "--save" || p[2] === "--save") { error(ctx, USAGE); return; }
+      : (p[0] === "transcription" && p[1] === "profile" || p[0] === "t" && p[1] === "p") ? "transcription"
+      : p[0] === "correction" && p[1] === "model" ? "correction" : undefined;
+    if (!["recorder", "transcription", "correction"].includes(group ?? "") || p.length > 4 || p.length === 4 && p[3] !== "--save" || p[2] === "--save") { error(ctx, USAGE); return; }
     if (p.length === 2) {
+      if (group === "correction") { notice(ctx, `Next correction model: ${correctionSelection.selected ? safeLabel(correctionSelection.selected) : "none"}. Use correction model SELECTOR [--save].`); return; }
       notice(ctx, group === "recorder" ? `Recording source: ${selection.config?.recorder.source ? safeLabel(selection.config.recorder.source) : "server default"}. Use recorder source NAME [--save].` : `Next transcription profile: ${selection.selected ?? "unavailable"}. Use transcription profile NAME [--save].`); return;
     }
     if (p.length < 3) { error(ctx, USAGE); return; }
@@ -436,14 +464,17 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       if (group === "transcription") {
         await select(p[2]!, save);
         if (live(current)) notice(ctx, `Transcription profile ${safeLabel(p[2]!)} ${save ? "saved order" : "selected temporarily"}; next: ${selection.selected ?? "unavailable"}. Active operation unchanged.`);
+      } else if (group === "correction") {
+        await selectCorrection(p[2]!, save);
+        if (live(current)) notice(ctx, `Correction model ${safeLabel(p[2]!)} ${save ? "saved order" : "selected temporarily"}; next: ${correctionSelection.selected ? safeLabel(correctionSelection.selected) : "none"}. Active operation unchanged.`);
       } else {
         if (reloading || !selection.config) throw new ConfigError("oaistt configuration unavailable/loading.");
-        const request = ++epoch; selection.invalidate();
+        const request = ++epoch; selection.invalidate(); correctionSelection.invalidate();
         deps.store.setSource(p[2] === "default" ? null : p[2]!); changing++;
         try {
           if (save) await deps.store.saveSource();
           const config = await deps.store.load();
-          if (request === epoch) selection.saved(config, selection.generation);
+          if (request === epoch) savedSelections(config);
         } finally { changing--; }
         if (live(current)) notice(ctx, `Recording source ${save ? "saved" : "changed temporarily"}; host routing unchanged.`);
       }
@@ -473,6 +504,6 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       return { content: [{ type: "text", text: JSON.stringify({ requested: params.name, selected: selection.selected, saved: params.save ?? false, default: selection.config?.transcription.order[0] ?? null }) }], details: undefined };
     },
   });
-  return { controller, selection };
+  return { controller, selection, correctionSelection };
 }
 export default function oaistt(pi: ExtensionAPI): void { registerDictation(pi); }

@@ -103,6 +103,15 @@ Check the two prompt modes separately with synthetic targets:
 
 Synthetic prompt/dispatch assertions do not establish model compliance or quality.
 
+Check correction preference separately from response quality: let the first
+registered model fail or time out and a following model succeed, then confirm
+the next F7 and dictation start at that successful selector. Check manual choice,
+same-selector reselection, temporary/save behavior, literal `$current` save,
+no-wrap exhaustion, conversation changes and settings/full reload. Listing,
+help and status must distinguish the saved order/default from the next choice
+without contacting providers or changing active work. Synthetic coverage does
+not qualify these routes on a live installation.
+
 Check temperature unset/null (no sampling override), an approved numeric default,
 a named override including `0`, and named null clearing that default. `$current`
 uses its actual model's tuning. Verify only explicitly authorized models/settings;

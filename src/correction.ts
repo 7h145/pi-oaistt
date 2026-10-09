@@ -16,6 +16,7 @@ import type { ModelRegistry, ExtensionContext } from "@earendil-works/pi-coding-
 export type SessionReader = Pick<ExtensionContext["sessionManager"], "buildSessionProjection">;
 import type { Config } from "./config.ts";
 import { bounded, TimeoutError } from "./operation.ts";
+import { correctionCandidates } from "./correction-selection.ts";
 
 const points = (text: string) => [...text];
 const count = (text: string) => points(text).length;
@@ -162,6 +163,8 @@ function correctedText(message: AssistantMessage, manual: boolean): CheckedRespo
 export type CorrectionOutcome = { kind: "corrected"; text: string } | { kind: "exhausted" } | { kind: "thinking-error"; message: string };
 export interface CorrectionOptions {
   manual?: boolean;
+  selected?: string;
+  succeeded?(selector: string): void;
   isCurrent?(): boolean;
   current?: { provider: string; id: string };
   warning?(failed: string, reason: CorrectionFailureReason, next: string): void;
@@ -179,7 +182,8 @@ export async function correct(
   };
   check(signal);
   if (!config.correction.automatic && !manual) return { kind: "corrected", text: raw };
-  if (!config.correction.order.length) return { kind: "exhausted" };
+  const candidates = correctionCandidates(config, options.selected);
+  if (!candidates.length) return { kind: "exhausted" };
   const systemPrompt = manual ? MANUAL_CORRECTION_PROMPT : STT_CORRECTION_PROMPT;
   const deadline = performance.now() + config.correction.totalTimeoutSeconds * 1000;
   const snapshot = correctionContext(session, config.correction.context.maxChars);
@@ -189,7 +193,7 @@ export async function correct(
     return await bounded(async totalSignal => {
       const seen = new Set<string>();
       let failed: { name: string; reason: CorrectionFailureReason } | undefined;
-      for (const selector of config.correction.order) {
+      for (const selector of candidates) {
         check(totalSignal);
         if (performance.now() >= deadline) return { kind: "exhausted" };
         const name = selector === "$current" && options.current ? `${options.current.provider}/${options.current.id}` : selector;
@@ -224,7 +228,10 @@ export async function correct(
           }, totalSignal, Math.min(tuning.attemptTimeoutSeconds * 1000, deadline - performance.now()));
           check(totalSignal);
           if (performance.now() >= deadline) return { kind: "exhausted" };
-          if ("text" in response) return { kind: "corrected", text: response.text };
+          if ("text" in response) {
+            options.succeeded?.(selector);
+            return { kind: "corrected", text: response.text };
+          }
           failed = { name: actual, reason: response.reason };
         } catch (error) {
           check(totalSignal);

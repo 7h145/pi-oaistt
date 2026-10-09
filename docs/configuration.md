@@ -191,7 +191,8 @@ sandbox. Metadata may initialize lazily in non-TUI modes without audio/editor ac
 `automatic: true` attempts post-STT correction only through the explicitly
 configured order. Empty order means no requests and raw dictation under the
 ordinary exhaustion/notice policy. `automatic: false` gives raw dictation without
-a correction-failure notice. F7 uses the same order regardless of this flag.
+a correction-failure notice. F7 shares the same selection and fallback order
+regardless of this flag.
 Actual correction needs a registered candidate, available Pi credentials and a
 successful request; the flag alone cannot authorize a model.
 
@@ -214,10 +215,25 @@ appended entries. Neither credentials, a subscription nor the Whisper default
 grant correction consent. Registration, auth and capabilities still use normal
 request-time checks; no live compatibility or quality validation is claimed.
 
-Resolve only ordered selectors, restart at the beginning each operation, and dedupe
-actual registered provider/model identities at first position. `$current` freezes the
-main identity at recording start/F7 invocation, **not its thinking level**. Named
-settings outside order may tune that identity but never add requests. Pi owns actual
+Resolve only ordered selectors. Start at the selected entry, then try only
+following entries without wrapping. Deduplicate actual registered provider/model
+identities at their first eligible position. A successful, still-owned response
+remembers its selector for both F7 and dictation, without writing configuration.
+Failure, exhaustion, cancellation and late results do not change that choice.
+A newer manual choice/reselection/save or settings reload wins over held success;
+later cancellation does not undo a choice legitimately remembered before it.
+
+Initially select the first entry. `correction model SELECTOR` temporarily chooses
+an entry already in `correction.order`; `--save` moves it to the saved first
+position, preserving other relative order and unrelated settings. Neither tuning
+entries outside the order nor available credentials authorize new candidates.
+List/selection commands do not read drafts, resolve the main model, inspect
+credentials or contact providers. Saving `$current` keeps the literal selector.
+
+An eligible `$current` freezes the main identity at recording start/F7 invocation,
+**not its thinking level**. Pi's main-model changes do not select another entry;
+the next operation resolves `$current` afresh if it is eligible. Named settings
+outside order may tune that identity but never add requests. Pi owns actual
 provider routing/auth; registered identity dedupe cannot identify all physical routers.
 
 Thinking null/omission means **no override**, not guaranteed thinking off or absence
@@ -303,8 +319,10 @@ switch. Its ordered list previews the effective chain for the next dictation:
 start at the selected profile, then only following profiles if fallback is on,
 without wrapping; otherwise show only the selected profile. Automatic success can
 change this process-local starting point without changing the saved default.
-Correction shows automatic mode and the configured next-operation model order;
-`$current` includes the main identity at display time only when explicitly listed.
+Correction shows automatic mode, the selected entry, saved default and following
+candidates for the next operation. `$current` includes the main identity at display
+time only when eligible in that chain. `correction list` reports the complete
+saved order and next candidates without resolving `$current`.
 Neither list is a live-attempt/availability claim. Status probes no models, audio
 or credentials. `Configuration loaded successfully` means parsed configuration is
 available, not provider/microphone/shortcut readiness. Failed loading reports
@@ -318,13 +336,14 @@ the resolved physical device. Active work retains its frozen settings and model
 identity even when selections change.
 
 Full help introduces dictation/draft correction, then presents active controls,
-dictation commands, transcription profiles, capture device, settings/help, and
-notes. Abbreviation notation is explained after controls, before the commands;
+dictation commands, transcription profiles, correction models, capture device,
+settings/help, and notes. Abbreviation notation is explained after controls,
+before the commands;
 notes explain temporary selections and `--save` once. Headings, commands and keys
 use bold `text` highlights over a muted base, without boxes or section colors.
 Controls include differing defaults and any bound start/stop keys. The compact
-correction line names only the first configured model (resolving `$current` if
-listed first), or explains missing configuration. It is not an availability check;
+correction line names the selected model (resolving `$current` when selected),
+or explains missing configuration. It is not an availability check;
 standalone status retains the complete next-operation order and pending keys.
 
 Each response is one UI-only notification so Pi's consecutive-info coalescing
@@ -341,22 +360,26 @@ are supported:
 | `recorder source NAME [--save]` | `r s NAME [--save]` |
 | `transcription list` | `t l` |
 | `transcription profile NAME [--save]` | `t p NAME [--save]` |
+| `correction list` | — |
+| `correction model SELECTOR [--save]` | — |
 | `reload` | `rl` |
 
-No-name `recorder source` / `transcription profile` reports current selection/usage,
-never a dialog or mutation.
+No-name `recorder source` / `transcription profile`, and no-selector
+`correction model`, report current selection/usage, never a dialog or mutation.
 `recorder source default [--save]` follows server default, persisting null.
 Only the commands and aliases listed above are accepted. Saving a selection
-requires a name; draft correction is invoked with F7, not a typed command.
+requires a name or model selector; draft correction is invoked with F7, not a
+typed command.
 Commands never submit a main-agent turn; output is UI-only.
 
 Saves serialize the entire read/validate/modify/private atomic-rename transaction
 through Pi's file mutation queue. Other fields/definitions are preserved; live edits
 are checked before replacement. This is not a cross-process filesystem lock.
-Settings-only reload resets next profile, preserves temporary recorder override and
-active frozen work; a failed reload inhibits new work until fixed. Full reload resets
-runtime preferences to file defaults and cancels old work. Temporary source/profile
-changes never silently become saved defaults.
+Settings-only reload resets next profile and correction model to their saved first
+entries, preserving temporary recorder override and active frozen work; a failed
+reload inhibits new work until fixed. Full reload resets runtime preferences to
+file defaults and cancels old work. Temporary source/profile/model changes never
+silently become saved defaults.
 
 ## Keys and reload
 
