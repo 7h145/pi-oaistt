@@ -23,8 +23,8 @@ type CaptureKind = "submit" | "followUp";
 
 // Pi 0.99.2 handles these before routing editor submissions to AgentSession.
 // Match its exact-vs-argument behavior, not every slash-prefixed string.
-// Regression tests exercise the real InteractiveMode callbacks. There is no
-// public built-in-command classification API; keep this seam version-tested.
+// There is no public built-in-command classification API. Native command names
+// and matching rules depend on the Pi version.
 const exactCommands = new Set([
   "settings", "scoped-models", "share", "copy", "session", "changelog",
   "hotkeys", "fork", "clone", "tree", "trust", "logout", "new", "reload",

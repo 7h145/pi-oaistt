@@ -52,9 +52,9 @@ aborting the main agent; Escape keeps its normal Pi behavior.
 - For correction: a model registered in Pi with usable credentials.
 - An API key when the selected transcription service requires one.
 
-Version 0.2.3 is pre-1.0. The tested Pi API baseline is **0.99.2**; further
-microphone and provider checks are still open. See the
-[validation checklist](docs/validation.md) for details.
+Version 0.2.3 is pre-1.0. Interfaces may change incompatibly before v1.0;
+backward compatibility is not maintained. Check the current
+[configuration reference](docs/configuration.md) when updating.
 
 Dictation and draft correction require the terminal editor, not RPC,
 print, or JSON mode. Extensions that replace Pi's editor are not
@@ -483,10 +483,10 @@ npm test
 [GitHub Actions CI](.github/workflows/ci.yml) runs typechecking and the
 synthetic test suite on Linux with Node 22.19.0 and 24, for pushes and pull
 requests (or manually). It needs no microphone, audio server or provider
-credentials; it does not replace live acceptance.
+credentials.
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for engineering evidence and
-[docs/validation.md](docs/validation.md) for live acceptance checks.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the code structure, integration
+boundaries and guidance on adapting the extension.
 
 See also [pi-lazy](https://github.com/7h145/pi-assorted/tree/main/extensions/pi-lazy)
 for a separate Pi draft-correction extension.

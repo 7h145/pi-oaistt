@@ -4,14 +4,16 @@ Settings live in `pi-oaistt.json` under Pi's agent directory (`getAgentDir()`),
 with no project layer. Files must be regular, non-symlink, at most 64 KiB.
 Reading defaults never writes a file.
 
-Unknown fields, invalid identities/order references and invalid tuning
-fail closed. No malformed present transcription section inherits a shipped route.
-Thinking faults remain isolated correction errors; malformed/conflicting keys
-localize to those bindings. Other valid controls remain available.
+Unknown fields, invalid profile definitions or model selectors, and invalid
+numeric settings cause configuration loading to fail. A malformed transcription
+section does not fall back to the built-in OpenAI route. Thinking errors are
+isolated to correction; malformed or conflicting keys disable only the affected
+bindings. Other valid controls remain available.
 
 ## Example
 
-Endpoints/model IDs below are placeholders, not compatibility evidence:
+Replace the placeholder endpoints and model IDs below with your services and
+registered Pi models:
 
 ```json
 {
@@ -144,8 +146,9 @@ audio access and handle server authorization and UID/cookie/path permissions.
 An illustrative host-approved bind uses your runtime's
 bind-mount option for `APPROVED_PULSE_SOCKET` at `/run/host-pulse/native` and
 `PULSE_SERVER=unix:/run/host-pulse/native`; provision client tools in the image.
-This is not an exercised universal Docker/Podman/rootless recipe. Do not expose
-another socket or change host defaults merely to make a test pass.
+The mount syntax and authorization depend on your container runtime and audio
+server. Share only the intended socket with host approval; no extra socket or
+host-default change is required by the extension.
 
 The socket can grant **broad host audio access/control**, including monitors,
 playback and routing/volume changes under server policy. A `:ro` filesystem mount
@@ -213,7 +216,8 @@ The [README correction example](../README.md#correction) is opt-in configuration
 only. Its models are never shipped candidates, hidden fallbacks or automatically
 appended entries. Neither credentials, a subscription nor the Whisper default
 grant correction consent. Registration, auth and capabilities still use normal
-request-time checks; no live compatibility or quality validation is claimed.
+request-time checks. Choose models suitable for your drafts and review their
+output before submitting.
 
 Resolve only ordered selectors. Start at the selected entry, then try only
 following entries without wrapping. Deduplicate actual registered provider/model
@@ -286,8 +290,9 @@ stop key; unlike startup, no start/stop pair is required once recording is activ
 Start/correction keys are never shown here. Cancellation is independent. Unbound
 hints are omitted; all-unbound recording retains `● REC 00:05 · oaistt`, with
 slash commands still available. Pending configuration never changes the advertised
-active keys before full reload. Pi owns narrow-terminal wrapping/clipping; the
-existing elapsed/theme refresh and ownership-scoped clearing are unchanged.
+active keys before full reload. Pi owns narrow-terminal wrapping/clipping. The
+widget refreshes elapsed time and theme styling, shows the next phase when capture
+ends, and clears on completion or cancellation.
 
 Transcription and both automatic/manual correction show
 `oaistt · transcribing… · F12 cancel` or `oaistt · correcting… · F12 cancel`.
@@ -399,7 +404,8 @@ Action IDs: `dictation.toggle` (F8), `editor.correct` (F7), `operation.cancel` (
 plus unbound `dictation.start`/`dictation.stop`. Each value is one Pi key string or
 an array; omission keeps defaults, `[]` disables. Modifiers: ctrl/alt/shift/super;
 keys include Pi's letters, digits, special/symbol keys and F1–F12. Examples:
-`"ctrl+shift+x"`, `["f8","f9"]`. Terminal support/interception still needs testing.
+`"ctrl+shift+x"`, `["f8","f9"]`. Your terminal or tmux may intercept a key before
+Pi receives it; choose a binding that reaches Pi.
 
 Canonical alias/modifier-order duplicates are disabled, not arbitrarily assigned.
 Invalid actions/keys get localized red errors; no silent replacement by defaults.
