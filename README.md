@@ -218,7 +218,8 @@ the starting point for both F7 and dictation. It can advance again after
 another fallback; reload restores the saved first entry. Automatic
 fallback never changes your saved configuration or wraps to earlier entries.
 
-Use **`/oaistt correction list`** to see the saved order and next choices.
+Use **`/oaistt correction list`** to see selectable entries in the `SELECTOR`
+column, in saved order. The selected entry is bold.
 Select an entry already in the list with
 **`/oaistt correction model SELECTOR`**, where `SELECTOR` is a
 `provider/model` or `$current`. Add `--save` to make it the saved first
@@ -361,6 +362,10 @@ Only names listed in `order` are active. List or select them with:
 /oaistt transcription profile local
 /oaistt transcription profile local --save
 ```
+
+The list labels selectable profile names as `NAME` and their model labels as
+`MODEL`. Pass only the `NAME` value, such as `local`, to the selection command.
+The selected name is bold; inactive definitions are not listed.
 
 Selection without `--save` lasts for the extension runtime. Saving moves
 the selected name to the front of the configured order. An active

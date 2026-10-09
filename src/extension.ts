@@ -359,6 +359,33 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     lines.push("", `See ${strong("/oaistt help")} for commands and controls.`);
     return lines.join("\n");
   }
+  function selectionList(ctx: ExtensionContext, kind: "transcription" | "correction"): string {
+    const strong = (text: string) => ctx.ui.theme.style(text, { fg: "text", bold: true });
+    const config = selection.config;
+    const title = strong(kind === "transcription" ? "Transcription profiles" : "Correction models");
+    if (!config) return `${title}\n  Configuration unavailable; fix settings and /oaistt reload.`;
+    if (kind === "transcription") {
+      const { order, profiles } = config.transcription;
+      const width = Math.max("NAME".length, ...order.map(name => name.length));
+      return [
+        title, `  ${strong("NAME")}${" ".repeat(width - 4 + 2)}${strong("MODEL")}`,
+        ...order.map(name => `  ${name === selection.selected ? strong(name) : name}${" ".repeat(width - name.length + 2)}${safeLabel(profiles[name]!.model)}`),
+        "", "Use a NAME from the first column:",
+        `  ${strong(`/oaistt transcription profile ${selection.selected ?? order[0]}`)}`,
+        "Add --save to keep the choice.",
+      ].join("\n");
+    }
+    const order = config.correction.order;
+    if (!order.length) return `${title}\n  No selectable models. Add entries to correction.order and /oaistt reload.`;
+    return [
+      title, `  ${strong("SELECTOR")}`,
+      // Validated selectors contain no whitespace/controls. Do not shorten command arguments.
+      ...order.map(selector => `  ${selector === correctionSelection.selected ? strong(selector) : selector}`),
+      "", "Use a SELECTOR from the list:",
+      `  ${strong(`/oaistt correction model ${correctionSelection.selected ?? order[0]}`)}`,
+      "Add --save to keep the choice.",
+    ].join("\n");
+  }
   function status(ctx: ExtensionContext, lead?: string): void {
     notice(ctx, [lead, statusText(ctx)].filter(Boolean).join("\n"));
   }
@@ -391,12 +418,12 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       command("/oaistt dictation stop (d stop)", "Stop and transcribe"),
       command("/oaistt cancel (x)", "Cancel oaistt"), "",
       strong("Transcription:"), "  Choose which configured service transcribes your speech.", "",
-      command("/oaistt transcription list (t l)", "Show profiles and fallback policy"),
+      command("/oaistt transcription list (t l)", "List selectable profile names"),
       command("/oaistt transcription profile NAME [--save] (t p)"),
       "    Select a profile for subsequent dictation.", "",
       strong("Correction:"), "  Choose a model for draft and dictation correction.",
       `  ${correction}`, "",
-      command("/oaistt correction list", "Show model choices and fallback order"),
+      command("/oaistt correction list", "List selectable model selectors"),
       command("/oaistt correction model SELECTOR [--save]"),
       "    Select a configured provider/model or $current entry.", "",
       strong("Capture device:"), "  Choose the microphone or other recording input.", "",
@@ -440,8 +467,8 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       if (live(current) && selection.config) status(ctx, "oaistt settings reloaded; active operation keeps frozen settings.");
       return;
     }
-    if (action === "transcription list") { notice(ctx, JSON.stringify(selection.metadata(activeProfile))); return; }
-    if (action === "correction list") { notice(ctx, JSON.stringify(correctionSelection.metadata(selection.config))); return; }
+    if (action === "transcription list") { notice(ctx, selectionList(ctx, "transcription")); return; }
+    if (action === "correction list") { notice(ctx, selectionList(ctx, "correction")); return; }
     if (action === "recorder sources") {
       try { const sources = await deps.sources(current.abort.signal); if (live(current)) notice(ctx, JSON.stringify(sources)); }
       catch (failure) {

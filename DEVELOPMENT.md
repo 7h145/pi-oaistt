@@ -146,7 +146,8 @@ and remember only a successful owned result. Newer manual choice/reselection/sav
 or settings reload takes precedence over held success. Settings/full reload reset
 to the saved first entry; automatic fallback never writes configuration.
 
-`/oaistt correction list` reports saved order/default and next candidates.
+`/oaistt correction list` shows exact selectable identifiers in saved order;
+status retains the default and next-attempt policy.
 `/oaistt correction model SELECTOR [--save]` selects only an ordered entry;
 save moves it to the front without disturbing other settings. These commands do
 not inspect drafts, credentials or provider availability, or change Pi's model.
@@ -251,11 +252,10 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 583 synthetic tests and typechecking pass** against Pi
-0.99.2 on Node 26.10.0, with isolated settings. The production change passed the
-579-test suite and typechecking on Node 22.19.0/24.21.0 too; the four subsequent
-test-only additions were checked on Node 26.10.0, without repeating that matrix.
-Native UI tests cover
+**Latest full baseline: 586 synthetic tests and typechecking pass** against Pi
+0.99.2 on Node 26.10.0, with isolated settings. Seven focused list/help/privacy
+checks and typechecking also pass on Node 22.19.0/24.21.0. The full supported
+runtime matrix was not repeated for this presentation change. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
 72-column bullet wrapping: generated heading/bullet/continuation indents are
@@ -284,6 +284,14 @@ draft edits, prompt capture, takeover and teardown. Save tests preserve newer
 temporary intent, unrelated fields/inactive tuning and private file modes; invalid
 live edits cannot be overwritten. Read-only list/help/status and no-selector usage
 do not inspect drafts or providers, including an ineligible `$current`.
+Selection lists are human-facing lookup tables, not metadata dumps: `NAME`/
+`MODEL` for transcription, `SELECTOR` for correction, exact selectable arguments,
+selected argument bold, and a concrete selection example. Native regular/fullscreen
+checks cover alias equivalence, earlier choices, inactive-entry exclusion, long
+identifiers, acceptance by the corresponding command, coalescing and narrow layouts.
+Read-only guards retain draft/model/audio exclusions; agent metadata stays JSON.
+Empty correction order and unavailable settings have distinct explanations.
+
 A fresh-runtime test verifies reset after full reload. Four additional checks
 protect three distinct interactions: selection changes during recording or
 transcription affect only the next operation; a remembered winner can fail and

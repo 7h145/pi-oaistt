@@ -1314,8 +1314,10 @@ test("correction list/help/status and no-selector usage are read-only and skip i
   h.ui.getEditorText = () => { throw new Error("must not read draft"); };
   const counts = h.counts(), generation = h.correctionSelection.generation;
   await h.command("correction list");
-  assert.deepEqual(JSON.parse(h.notices.at(-1)!), { selected: "fixture/three", next: "fixture/three", default: "fixture/one", automatic: true,
-    order: ["fixture/one", "$current", "fixture/three"], candidates: ["fixture/three"] });
+  assert.equal(h.notices.at(-1), "Correction models\n  SELECTOR\n  fixture/one\n  $current\n  fixture/three\n\nUse a SELECTOR from the list:\n  /oaistt correction model fixture/three\nAdd --save to keep the choice.");
+  await h.command("transcription list");
+  assert.match(h.notices.at(-1)!, /Transcription profiles\n  NAME\s+MODEL/);
+  assert.doesNotMatch(h.notices.at(-1)!, /Fallback:|Default:|Next attempts:|endpoint|auth/);
   await h.command("correction model"); assert.match(h.notices.at(-1)!, /Next correction model: fixture\/three.*SELECTOR/);
   await h.command("status"); assert.equal(statusSection(h.notices.at(-1)!, "Correction"),
     "  Automatic: on\n  Selected: fixture/three\n  Default: fixture/one\n  Models, in order:\n    • fixture/three");
@@ -1414,4 +1416,65 @@ test("profile and source saves preserve remembered correction without saving it"
   assert.equal(h.correctionOptions[1].selected, "$current");
   assert.equal(h.ui.getEditorText(), "synthetic draft"); assert.equal(h.counts().captures, 0);
   assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+});
+
+// Lists are a selection reference: every displayed argument must actually work.
+for (const fullscreen of [false, true]) test(`selection lists expose exact accepted arguments in native ${fullscreen ? "fullscreen" : "regular"} UI`, async () => {
+  const h = harness({ fullscreen, nativeNotifications: true });
+  const config = correctionConfig(), longName = `profile-${"x".repeat(56)}`;
+  const longSelector = `fixture/${"nested/".repeat(12)}model/語`;
+  config.transcription.profiles[longName] = { ...config.transcription.profiles.local!, model: "fixture-long-model" };
+  config.transcription.profiles.inactive = { ...config.transcription.profiles.local!, model: "inactive-model" };
+  config.transcription.order.push(longName);
+  config.correction.order = ["fixture/one", longSelector, "$current"];
+  h.setConfig(config); await h.start();
+  await h.command("transcription profile remote"); await h.command(`correction model ${longSelector}`);
+  Object.defineProperty(h.ctx, "model", { get: () => { throw new Error("list must not resolve current identity"); } });
+  h.ctx.modelRegistry = { find: () => { throw new Error("list must not probe models"); } } as unknown as ModelRegistry;
+  const counts = h.counts(), profileToken = h.selection.snapshot(), correctionToken = h.correctionSelection.snapshot();
+  const width = longName.length;
+  const rows = config.transcription.order.map(name => `  ${name}${" ".repeat(width - name.length + 2)}${config.transcription.profiles[name]!.model}`);
+  for (const args of ["transcription list", "t l"]) {
+    h.notices.length = 0; await h.command(args);
+    assert.equal(h.notices.length, 1);
+    assert.equal(h.notices[0], ["Transcription profiles", `  NAME${" ".repeat(width - 4 + 2)}MODEL`, ...rows,
+      "", "Use a NAME from the first column:", "  /oaistt transcription profile remote", "Add --save to keep the choice."].join("\n"));
+    assert.ok(h.styledNotices.at(-1)!.includes(h.ui.theme.style("remote", { fg: "text", bold: true })));
+    assert.doesNotMatch(h.notices[0]!, /inactive|endpoint|auth|Fallback:|Default:|Next attempts:|\{/);
+    const profileRendered = h.mode.chatContainer.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+    assert.match(profileRendered, /NAME\s+MODEL/); assert.ok(profileRendered.includes(longName));
+  }
+  h.notices.length = 0; await h.command("correction list");
+  assert.equal(h.notices.length, 1);
+  assert.equal(h.notices[0], ["Correction models", "  SELECTOR", "  fixture/one", `  ${longSelector}`, "  $current",
+    "", "Use a SELECTOR from the list:", `  /oaistt correction model ${longSelector}`, "Add --save to keep the choice."].join("\n"));
+  assert.ok(h.styledNotices.at(-1)!.includes(h.ui.theme.style(longSelector, { fg: "text", bold: true })));
+  assert.doesNotMatch(h.notices[0]!, /inactive|Automatic:|Default:|Next attempts:|\{/);
+  const rendered = h.mode.chatContainer.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+  assert.match(rendered, /SELECTOR/); assert.ok(rendered.includes(longSelector));
+  for (const columns of [32, 80, 120]) assert.ok(h.mode.chatContainer.render(columns).every(line => visibleWidth(line) <= columns));
+  assert.deepEqual(h.counts(), counts); assert.deepEqual(h.selection.snapshot(), profileToken);
+  assert.deepEqual(h.correctionSelection.snapshot(), correctionToken);
+  const metadata = await h.tools.get("oaistt_profiles").execute("test", {}, new AbortController().signal, undefined, h.ctx);
+  const structured = JSON.parse(metadata.content[0].text); // Agent tools still return structured data.
+  assert.equal(structured.selected, "remote");
+  assert.ok(structured.profiles.some((profile: { name: string; active: boolean }) => profile.name === "inactive" && !profile.active));
+  for (const name of config.transcription.order) { await h.command(`transcription profile ${name}`); assert.equal(h.selection.selected, name); }
+  for (const selector of config.correction.order) { await h.command(`correction model ${selector}`); assert.equal(h.correctionSelection.selected, selector); }
+  assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+});
+
+test("selection lists distinguish empty correction configuration from unavailable settings", async () => {
+  const h = harness(); await h.start();
+  await h.command("correction list");
+  assert.equal(h.notices.at(-1), "Correction models\n  No selectable models. Add entries to correction.order and /oaistt reload.");
+  assert.doesNotMatch(h.notices.at(-1)!, /Use a SELECTOR|correction model undefined/);
+  h.selection.reset(); h.correctionSelection.reset();
+  for (const args of ["transcription list", "correction list"]) {
+    await h.command(args);
+    assert.match(h.notices.at(-1)!, /Configuration unavailable; fix settings and \/oaistt reload\./);
+    assert.doesNotMatch(h.notices.at(-1)!, /NAME|SELECTOR|No selectable models|Add --save/);
+  }
+  assert.equal(h.counts().captures, 0); assert.equal(h.targets.length, 0); assert.equal(h.main.signal.aborted, false);
 });

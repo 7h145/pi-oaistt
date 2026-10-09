@@ -321,9 +321,8 @@ without wrapping; otherwise show only the selected profile. Automatic success ca
 change this process-local starting point without changing the saved default.
 Correction shows automatic mode, the selected entry, saved default and following
 candidates for the next operation. `$current` includes the main identity at display
-time only when eligible in that chain. `correction list` reports the complete
-saved order and next candidates without resolving `$current`.
-Neither list is a live-attempt/availability claim. Status probes no models, audio
+time only when eligible in that chain.
+Neither status list is a live-attempt/availability claim. Status probes no models, audio
 or credentials. `Configuration loaded successfully` means parsed configuration is
 available, not provider/microphone/shortcut readiness. Failed loading reports
 `Configuration unavailable`, with a separate diagnostic; a missing file uses defaults.
@@ -345,6 +344,19 @@ Controls include differing defaults and any bound start/stop keys. The compact
 correction line names the selected model (resolving `$current` when selected),
 or explains missing configuration. It is not an availability check;
 standalone status retains the complete next-operation order and pending keys.
+
+The two selection-list commands serve a different purpose from status: they
+show exact arguments accepted by the selection commands, in saved order, including
+choices before the selected entry. They do not repeat defaults, switches or next
+attempts. `transcription list` (or `t l`) labels its columns `NAME` and `MODEL`;
+pass only `NAME` to `transcription profile NAME`. `correction list` labels its
+single column `SELECTOR`; pass the whole identifier to `correction model SELECTOR`.
+Names/selectors are not shortened; secondary STT model labels remain bounded.
+The selected argument is bold, and a concrete command example explains selection
+and optional `--save`. Only ordered, selectable entries are shown; inactive
+definitions/tuning are omitted. `$current` stays literal, with no identity or
+availability lookup. Empty correction order and unavailable settings are explained
+without inventing choices. Agent-facing metadata tools still return structured JSON.
 
 Each response is one UI-only notification so Pi's consecutive-info coalescing
 cannot hide help or pending-key details. Only these long forms/exact aliases
