@@ -128,8 +128,9 @@ test("Unicode budget includes labels/separators/markers; latest complete items o
   assert.equal(correctionContext({ buildSessionProjection: () => { throw new Error("history must not be read"); } }, 0), "");
 });
 
-function registryFixture(responses: Array<ReturnType<typeof fauxAssistantMessage> | "hang" | "throw">) {
-  const faux = fauxProvider({ provider: "fixture", models: [{ id: "one" }, { id: "two/slashed" }] });
+function registryFixture(responses: Array<ReturnType<typeof fauxAssistantMessage> | "hang" | "throw">,
+  modelIds = ["one", "two/slashed"]) {
+  const faux = fauxProvider({ provider: "fixture", models: modelIds.map(id => ({ id })) });
   const calls: { model: string; context: Context; signal: AbortSignal }[] = [];
   const lookups: string[] = [];
   const registry: Pick<ModelRegistry, "find" | "streamSimple"> = {
@@ -507,4 +508,24 @@ test("ownership lost after provider completion prevents correction preference pu
     isCurrent: () => owned, succeeded: () => { publications++; },
   }));
   assert.equal(publications, 0);
+});
+
+// A remembered success is a starting point, not a promise that it stays usable.
+test("remembered correction winner can fail later and advance to the next winner", async () => {
+  const h = registryFixture(["throw", fauxAssistantMessage("B succeeds"), "throw",
+    fauxAssistantMessage("C succeeds"), fauxAssistantMessage("C succeeds again")], ["one", "two/slashed", "three"]);
+  const order = ["fixture/one", "fixture/two/slashed", "fixture/three"];
+  h.config.correction.order = [...order];
+  const choice = new CorrectionSelection(); choice.reset(h.config);
+  async function invoke(expected: string) {
+    const token = choice.snapshot();
+    assert.deepEqual(await correct("synthetic draft", h.config, new AbortController().signal, session(), h.registry, {
+      selected: token.selected, succeeded: selector => { choice.publish(token, selector); },
+    }), { kind: "corrected", text: expected });
+  }
+  await invoke("B succeeds"); assert.equal(choice.selected, "fixture/two/slashed");
+  await invoke("C succeeds"); assert.equal(choice.selected, "fixture/three");
+  await invoke("C succeeds again");
+  assert.deepEqual(h.calls.map(call => call.model), ["one", "two/slashed", "two/slashed", "three", "three"]);
+  assert.deepEqual(h.config.correction.order, order);
 });

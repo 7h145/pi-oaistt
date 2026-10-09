@@ -40,6 +40,18 @@ and tests on Ubuntu with Node 22.19.0 and 24. It isolates Pi settings in tempora
 storage, uses read-only permissions and SHA-pinned actions, and does not retain
 checkout credentials. CI is not live hardware/provider acceptance.
 
+## Choosing regression tests
+
+Each test needs a plausible, distinct failure to catch and an observable behavior
+to protect. Check existing coverage before adding it. Prefer the cheapest reliable
+layer; add variants only when they exercise different branches or lifecycle stages.
+Reuse fixtures instead of multiplying setup or adding a broad combination matrix.
+
+Use focused checks during iteration and broader regression checks before committing
+a coherent change. Repeat the supported Node matrix when runtime/API/dependency
+changes or a validation milestone warrants it, not for every unrelated edit.
+Test counts alone are not evidence of quality.
+
 ## Safety architecture
 
 ### Editor ownership and prompt capture
@@ -239,8 +251,11 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 579 synthetic tests and typechecking pass** against Pi
-0.99.2 on Node 22.19.0/24.21.0/26.10.0, with isolated settings. Native UI tests cover
+**Latest full baseline: 583 synthetic tests and typechecking pass** against Pi
+0.99.2 on Node 26.10.0, with isolated settings. The production change passed the
+579-test suite and typechecking on Node 22.19.0/24.21.0 too; the four subsequent
+test-only additions were checked on Node 26.10.0, without repeating that matrix.
+Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
 72-column bullet wrapping: generated heading/bullet/continuation indents are
@@ -269,8 +284,23 @@ draft edits, prompt capture, takeover and teardown. Save tests preserve newer
 temporary intent, unrelated fields/inactive tuning and private file modes; invalid
 live edits cannot be overwritten. Read-only list/help/status and no-selector usage
 do not inspect drafts or providers, including an ineligible `$current`.
-A fresh-runtime test verifies reset after full reload. This is synthetic API
-evidence, not live correction-fallback/provider quality qualification.
+A fresh-runtime test verifies reset after full reload. Four additional checks
+protect three distinct interactions: selection changes during recording or
+transcription affect only the next operation; a remembered winner can fail and
+advance again; profile/source saves preserve that choice without persisting it.
+The first two lifecycle stages use separate cases because correction has not yet
+started in either, but transcription already has a running request in one.
+
+Those focused checks took about 0.54 seconds including imports (about 42 ms in
+the four test bodies) in this local run. In disposable copies only, each intended
+failure was introduced deliberately: reading selection too late, remembering only
+the first winner, and resetting correction on unrelated saves. The corresponding
+checks failed on assertions. These are one-time negative controls, not additional
+permanent test runs. The full suite took about 2.8 seconds; timings are observations,
+not performance guarantees. Production source was unchanged.
+
+This is synthetic API evidence, not live correction-fallback/provider quality
+qualification.
 
 Profile commands cover both forms, temporary/save/no-name/rejected syntax, frozen
 settings and newer-choice races. Installed identity covers optional/malformed

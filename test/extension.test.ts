@@ -1361,3 +1361,57 @@ for (const reselect of [false, true]) test(`held correction save preserves newer
   assert.equal(h.selection.config!.correction.order[0], "$current");
   await h.command("reload"); assert.equal(h.correctionSelection.selected, "$current");
 });
+
+// Capture the choice at recording start, not when the later correction stage runs.
+for (const phase of ["recording", "transcribing"] as const)
+  test(`correction choice changes during ${phase} affect the next operation only`, async () => {
+    const h = harness({ correction: async (_target, _config, _signal, _session, _registry, options) => {
+      options?.succeeded?.(options.selected!);
+      return { kind: "corrected", text: "corrected synthetic" };
+    } });
+    h.setConfig(correctionConfig()); await h.start(); h.f8(); await nextTask();
+    if (phase === "transcribing") { h.f8(); await nextTask(); }
+    assert.equal(h.controller.phase, phase); assert.equal(h.correctionOptions.length, 0);
+    await h.command("correction model fixture/three");
+    assert.equal(h.controller.phase, phase); assert.equal(h.signals[0]!.aborted, false);
+    if (phase === "recording") { h.f8(); await nextTask(); }
+    h.raw.resolve("synthetic speech"); await h.controller.settled();
+    assert.equal(h.correctionOptions[0].selected, "fixture/one");
+    assert.equal(h.ui.getEditorText(), "corrected synthetic");
+    assert.equal(h.correctionSelection.selected, "fixture/three"); // Old success cannot undo the change.
+    h.ui.setEditorText("synthetic next draft"); h.f7(); await h.controller.settled();
+    assert.equal(h.correctionOptions[1].selected, "fixture/three");
+    assert.deepEqual(h.targets, ["synthetic speech", "synthetic next draft"]);
+    assert.equal(h.ui.getEditorText(), "corrected synthetic");
+    assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+  });
+
+// Saving another preference must neither reset correction nor persist its fallback.
+test("profile and source saves preserve remembered correction without saving it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "oaistt-independent-save-"));
+  open.push(() => rm(dir, { recursive: true, force: true }));
+  const store = new ConfigStore(dir);
+  const original = { transcription: profilesConfig().transcription,
+    correction: { order: ["fixture/one", "$current", "fixture/three"], automatic: false } };
+  await writeFile(store.path, JSON.stringify(original));
+  const h = harness({ store, correction: async (target, _config, _signal, _session, _registry, options) => {
+    options?.succeeded?.("$current"); return { kind: "corrected", text: target };
+  } });
+  await h.start(); h.ui.setEditorText("synthetic draft"); h.f7(); await h.controller.settled();
+  assert.equal(h.correctionSelection.selected, "$current");
+  await h.command("transcription profile remote --save");
+  assert.equal(h.correctionSelection.selected, "$current");
+  const profileSaved = JSON.parse(await readFile(store.path, "utf8"));
+  assert.equal(profileSaved.transcription.order[0], "remote");
+  assert.deepEqual(profileSaved.correction, original.correction);
+  await h.command("recorder source synthetic-input --save");
+  assert.equal(h.correctionSelection.selected, "$current");
+  const sourceSaved = JSON.parse(await readFile(store.path, "utf8"));
+  assert.equal(sourceSaved.recorder.source, "synthetic-input");
+  assert.deepEqual(sourceSaved.transcription, profileSaved.transcription);
+  assert.deepEqual(sourceSaved.correction, original.correction);
+  h.f7(); await h.controller.settled();
+  assert.equal(h.correctionOptions[1].selected, "$current");
+  assert.equal(h.ui.getEditorText(), "synthetic draft"); assert.equal(h.counts().captures, 0);
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
+});
