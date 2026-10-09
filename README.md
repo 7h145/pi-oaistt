@@ -52,7 +52,7 @@ aborting the main agent; Escape keeps its normal Pi behavior.
 - For correction: a model registered in Pi with usable credentials.
 - An API key when the selected transcription service requires one.
 
-Version 0.2.3 is pre-1.0. Interfaces may change incompatibly before v1.0;
+pi-oaistt is pre-1.0. Interfaces may change incompatibly before v1.0;
 backward compatibility is not maintained. Check the current
 [configuration reference](docs/configuration.md) when updating.
 

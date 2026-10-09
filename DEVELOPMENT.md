@@ -20,8 +20,9 @@ Node's built-in test runner. Its fixtures use synthetic inputs, controlled child
 processes, loopback HTTP servers and simulated providers; no microphone or provider
 credentials are required. Git is needed for the Git integration fixtures.
 
-Development dependencies pin Pi **0.99.2**. Pi supplies the runtime peer modules
-when loading the extension, and production imports use its public package exports.
+Development dependencies pin Pi package versions in [package.json](package.json)
+and the lockfile. Pi supplies the runtime peer modules when loading the extension,
+and production imports use its public package exports.
 There is no build step. From the checkout root, load it with:
 
 ```sh

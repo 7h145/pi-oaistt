@@ -39,10 +39,10 @@ async function platform(mode = "normal", changes: Partial<RecorderPlatform> = {}
   let limits = 0;
   const host: Partial<RecorderPlatform> = {
     checkTools: async () => {}, // synthetic tools; never depend on host audio clients
-    // Real child scheduling is not a 50 ms contract. Successful stops get the
-    // production-sized default budget; accelerate only deliberate hung stops.
+    // Successful stops use the configured production budget; override it only
+    // for deliberately hung children. Real child scheduling is not a 50 ms contract.
     tempRoot: dir, sourceEnv: undefined, pollMs: 5, startupMs: 1000,
-    graceMs: mode === "hang" ? 50 : 3000, terminateMs: 50, killMs: 1000,
+    ...(mode === "hang" ? { graceMs: 50 } : {}), terminateMs: 50, killMs: 1000,
     query: async (args) => args[0] === "get-default-source" ? "fixture-mic\n"
       : JSON.stringify([{ name: "fixture-mic", mute: false, monitor_of_sink: null }]),
     spawn: (command, args, options) => {

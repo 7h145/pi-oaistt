@@ -303,11 +303,11 @@ Cancellation prevents dictation insertion or leaves the manual draft unchanged;
 it never aborts the main agent. The widget refreshes with the theme and clears
 when processing or ownership ends.
 
-The status header identifies the loaded installation, for example
-`oaistt v0.2.3 (1234abc): idle. Configuration loaded successfully.` Version comes
-from its own `package.json`, not the latest tag. The seven-character hash is its checkout HEAD,
-not a guarantee of an unchanged working tree. Git is optional: npm/non-Git installs
-show the version alone. Only Git metadata at the resolved package root is used;
+The status header identifies the loaded installation, using this format:
+`oaistt v<version> (<commit>): idle. Configuration loaded successfully.` Version
+comes from its own `package.json`, not the latest tag. The seven-character hash
+is its checkout HEAD, not a guarantee of an unchanged working tree. Git is optional:
+npm/non-Git installs show the version alone. Only Git metadata at the resolved package root is used;
 the working project, Pi repository and parent repositories are never searched.
 Identity is cached once per interactive extension runtime, so status calls do not
 spawn Git. Missing/malformed metadata cannot block dictation; unavailable version

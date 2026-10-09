@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setImmediate as nextTask } from "node:timers/promises";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,8 +51,9 @@ test("real Pi discovery/jiti/runner loads symlinked directory, exposes commands 
     await command.handler("status", runner.createCommandContext());
     assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes("oaistt — speech to text · F8 to dictate · F7 to correct · F12 to cancel · see /oaistt help")));
     assert.ok(notices.some((text) => text.replace(/\x1b\[[0-9;]*m/g, "").includes("Configuration loaded successfully")));
+    const manifest = JSON.parse(await readFile(join(product, "package.json"), "utf8"));
     const installed = await loadInstallationIdentity(product);
-    assert.equal(installed.version, "0.2.2");
+    assert.equal(installed.version, manifest.version);
     assert.ok(notices.some(text => text.replace(/\x1b\[[0-9;]*m/g, "").includes(`${installationLabel(installed)}: idle.`)));
     native.ui.setEditorText("synthetic retained draft");
     await command.handler("recorder source", runner.createCommandContext());
