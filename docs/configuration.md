@@ -372,8 +372,8 @@ are supported:
 | `recorder source NAME [--save]` | `r s NAME [--save]` |
 | `transcription list` | `t l` |
 | `transcription profile NAME [--save]` | `t p NAME [--save]` |
-| `correction list` | — |
-| `correction model SELECTOR [--save]` | — |
+| `correction list` | `c l` |
+| `correction model SELECTOR [--save]` | `c m SELECTOR [--save]` |
 | `reload` | `rl` |
 
 No-name `recorder source` / `transcription profile`, and no-selector

@@ -423,8 +423,8 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
       "    Select a profile for subsequent dictation.", "",
       strong("Correction:"), "  Choose a model for draft and dictation correction.",
       `  ${correction}`, "",
-      command("/oaistt correction list", "List selectable model selectors"),
-      command("/oaistt correction model SELECTOR [--save]"),
+      command("/oaistt correction list (c l)", "List selectable model selectors"),
+      command("/oaistt correction model SELECTOR [--save] (c m)"),
       "    Select a configured provider/model or $current entry.", "",
       strong("Capture device:"), "  Choose the microphone or other recording input.", "",
       command("/oaistt recorder sources (r l)", "List available inputs"),
@@ -454,7 +454,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
   async function command(args: string, ctx: ExtensionContext): Promise<void> {
     const current = validScope(ctx); if (!current) return;
     const p = args.trim().split(/\s+/u).filter(Boolean);
-    const exact: Record<string, string> = { "": "status", h: "help", s: "status", x: "cancel", rl: "reload", "d t": "dictation toggle", "d start": "dictation start", "d stop": "dictation stop", "r l": "recorder sources", "t l": "transcription list" };
+    const exact: Record<string, string> = { "": "status", h: "help", s: "status", x: "cancel", rl: "reload", "d t": "dictation toggle", "d start": "dictation start", "d stop": "dictation stop", "r l": "recorder sources", "t l": "transcription list", "c l": "correction list" };
     const action = exact[p.join(" ")] ?? p.join(" ");
     if (action === "help") { help(ctx); return; }
     if (action === "status") { status(ctx); return; }
@@ -479,7 +479,7 @@ export function registerDictation(pi: ExtensionAPI, overrides: Partial<Dependenc
     }
     const group = (p[0] === "recorder" && p[1] === "source" || p[0] === "r" && p[1] === "s") ? "recorder"
       : (p[0] === "transcription" && p[1] === "profile" || p[0] === "t" && p[1] === "p") ? "transcription"
-      : p[0] === "correction" && p[1] === "model" ? "correction" : undefined;
+      : (p[0] === "correction" && p[1] === "model" || p[0] === "c" && p[1] === "m") ? "correction" : undefined;
     if (!["recorder", "transcription", "correction"].includes(group ?? "") || p.length > 4 || p.length === 4 && p[3] !== "--save" || p[2] === "--save") { error(ctx, USAGE); return; }
     if (p.length === 2) {
       if (group === "correction") { notice(ctx, `Next correction model: ${correctionSelection.selected ? safeLabel(correctionSelection.selected) : "none"}. Use correction model SELECTOR [--save].`); return; }

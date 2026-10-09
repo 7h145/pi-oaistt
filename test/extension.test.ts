@@ -660,6 +660,8 @@ for (const fullscreen of [false, true]) test(`help survives native info coalesci
     assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!)));
     assert.match(text, /\(d t\) means \/oaistt d t/);
     assert.match(text, /transcription profile NAME \[--save\] \(t p\)/);
+    assert.match(text, /correction list \(c l\)/);
+    assert.match(text, /correction model SELECTOR \[--save\] \(c m\)/);
     const heading = "Notes:", notes = [
       " • Without a name or selector, selection commands show the current",
       "   choice and usage without changing it.",
@@ -1444,12 +1446,14 @@ for (const fullscreen of [false, true]) test(`selection lists expose exact accep
     const profileRendered = h.mode.chatContainer.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
     assert.match(profileRendered, /NAME\s+MODEL/); assert.ok(profileRendered.includes(longName));
   }
-  h.notices.length = 0; await h.command("correction list");
-  assert.equal(h.notices.length, 1);
-  assert.equal(h.notices[0], ["Correction models", "  SELECTOR", "  fixture/one", `  ${longSelector}`, "  $current",
-    "", "Use a SELECTOR from the list:", `  /oaistt correction model ${longSelector}`, "Add --save to keep the choice."].join("\n"));
-  assert.ok(h.styledNotices.at(-1)!.includes(h.ui.theme.style(longSelector, { fg: "text", bold: true })));
-  assert.doesNotMatch(h.notices[0]!, /inactive|Automatic:|Default:|Next attempts:|\{/);
+  for (const args of ["correction list", "c l"]) {
+    h.notices.length = 0; await h.command(args);
+    assert.equal(h.notices.length, 1);
+    assert.equal(h.notices[0], ["Correction models", "  SELECTOR", "  fixture/one", `  ${longSelector}`, "  $current",
+      "", "Use a SELECTOR from the list:", `  /oaistt correction model ${longSelector}`, "Add --save to keep the choice."].join("\n"));
+    assert.ok(h.styledNotices.at(-1)!.includes(h.ui.theme.style(longSelector, { fg: "text", bold: true })));
+    assert.doesNotMatch(h.notices[0]!, /inactive|Automatic:|Default:|Next attempts:|\{/);
+  }
   const rendered = h.mode.chatContainer.render(120).join("\n").replace(/\x1b\[[0-9;]*m/g, "");
   assert.match(rendered, /SELECTOR/); assert.ok(rendered.includes(longSelector));
   for (const columns of [32, 80, 120]) assert.ok(h.mode.chatContainer.render(columns).every(line => visibleWidth(line) <= columns));
@@ -1477,4 +1481,27 @@ test("selection lists distinguish empty correction configuration from unavailabl
     assert.doesNotMatch(h.notices.at(-1)!, /NAME|SELECTOR|No selectable models|Add --save/);
   }
   assert.equal(h.counts().captures, 0); assert.equal(h.targets.length, 0); assert.equal(h.main.signal.aborted, false);
+});
+
+// The alias must use the same intent and persistence path, not just resemble it.
+test("correction model shorthand shares no-selector, temporary, save and rejection behavior", async () => {
+  const h = harness(); h.setConfig(correctionConfig()); await h.start();
+  const initial = h.correctionSelection.snapshot();
+  await h.command("c m"); const usage = h.notices.at(-1);
+  assert.deepEqual(h.correctionSelection.snapshot(), initial);
+  await h.command("correction model"); assert.equal(h.notices.at(-1), usage);
+  await h.command("c m fixture/three");
+  assert.equal(h.correctionSelection.selected, "fixture/three");
+  assert.equal(h.selection.config!.correction.order[0], "fixture/one");
+  await h.command("c m $current --save");
+  assert.equal(h.correctionSelection.selected, "$current");
+  assert.deepEqual(h.selection.config!.correction.order, ["$current", "fixture/one", "fixture/three"]);
+  const saved = h.correctionSelection.snapshot();
+  for (const args of ["c l extra", "c m --save", "c m fixture/inactive", "c m fixture/three --unknown",
+    "c m fixture/three --save extra", "c model fixture/three", "correction m fixture/three"]) {
+    await h.command(args); assert.equal(h.categories.at(-1), "error", args);
+    assert.deepEqual(h.correctionSelection.snapshot(), saved, args);
+  }
+  assert.equal(h.counts().captures, 0); assert.equal(h.signals.length, 0); assert.equal(h.targets.length, 0);
+  assert.equal(h.main.signal.aborted, false); assert.equal(h.promptCalls.length, 0);
 });

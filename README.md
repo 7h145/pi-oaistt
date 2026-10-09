@@ -218,11 +218,12 @@ the starting point for both F7 and dictation. It can advance again after
 another fallback; reload restores the saved first entry. Automatic
 fallback never changes your saved configuration or wraps to earlier entries.
 
-Use **`/oaistt correction list`** to see selectable entries in the `SELECTOR`
-column, in saved order. The selected entry is bold.
+Use **`/oaistt correction list`** (or **`/oaistt c l`**) to see selectable
+entries in the `SELECTOR` column, in saved order. The selected entry is bold.
 Select an entry already in the list with
 **`/oaistt correction model SELECTOR`**, where `SELECTOR` is a
-`provider/model` or `$current`. Add `--save` to make it the saved first
+`provider/model` or `$current`; **`/oaistt c m SELECTOR`** is the shorthand.
+Add `--save` to make it the saved first
 choice. Work already running keeps its original choice. This does not
 change Pi's main model.
 

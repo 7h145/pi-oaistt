@@ -252,10 +252,11 @@ metadata cannot block controls. A hash names HEAD, not a clean/immutable build.
 
 ## Automated evidence
 
-**Latest full baseline: 586 synthetic tests and typechecking pass** against Pi
+**Latest full baseline: 587 synthetic tests and typechecking pass** against Pi
 0.99.2 on Node 26.10.0, with isolated settings. Seven focused list/help/privacy
-checks and typechecking also pass on Node 22.19.0/24.21.0. The full supported
-runtime matrix was not repeated for this presentation change. Native UI tests cover
+checks and typechecking also pass on Node 22.19.0/24.21.0 for the list presentation;
+the subsequent shorthand-only change was checked on Node 26.10.0. The full supported
+runtime matrix was not repeated for these UI/DSL changes. Native UI tests cover
 separate help/root-status identity, effective STT order/bold starts, neutral lists,
 missing state, pending keys and read-only active ownership. Only help Notes use
 72-column bullet wrapping: generated heading/bullet/continuation indents are
@@ -291,6 +292,10 @@ checks cover alias equivalence, earlier choices, inactive-entry exclusion, long
 identifiers, acceptance by the corresponding command, coalescing and narrow layouts.
 Read-only guards retain draft/model/audio exclusions; agent metadata stays JSON.
 Empty correction order and unavailable settings have distinct explanations.
+`c l` and `c m` are exact correction list/model aliases in both DSL and help.
+Existing native list/help checks cover display and output equivalence; a focused
+alias test covers no-selector usage, temporary selection, literal `$current` save
+and rejection without mutation. Mixed long/short forms remain unsupported.
 
 A fresh-runtime test verifies reset after full reload. Four additional checks
 protect three distinct interactions: selection changes during recording or
