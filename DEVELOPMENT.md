@@ -366,18 +366,23 @@ panels are synthetic: these tests are not a complete live Pi session or reload.
 
 ## Live acceptance
 
-The owner reports roughly **100 capture/correction runs** and accepts:
+An earlier owner report covered roughly **100 capture/correction runs**.
+Current owner-reported acceptance and feedback are:
 
 - **V2 microphone capture:** works as expected, including Bluetooth; failures
   are helpful.
 - **V4 correction/model quality:** overall workflow is acceptable; the owner reports
-  correct project spelling despite deliberately sloppy naming. This is end-to-end
-  evidence, not STT/correction attribution or qualification of mode-specific prompts.
-  Formatting, false contextual matches and repetition/emphasis/voice need live checks.
+  correct project spelling despite deliberately sloppy naming. That naming smoke
+  test is end-to-end evidence, without STT/correction attribution. Current feedback
+  on the separate F7/F8 prompts is positive: the owner considers the results better,
+  especially after dictation (F8). Real-world human testing is slow and ongoing;
+  this does not complete the mode-specific acceptance matrix. Formatting, false
+  contextual matches and repetition/emphasis/voice still need targeted live checks.
 - **V7 keys/presentation:** works as expected with the owner's Neovim/tmux
   workflow. Help/status UX, including Notes wrapping/alignment, is owner-confirmed.
   A live dictation smoke test confirms the clean footer, above-editor line, guidance
-  and working cancellation.
+  and working cancellation. The owner accepts the cosmetic fixes, including the
+  tagline and help, in the current setup.
 
 These are owner-reported live observations, not an independently measured matrix
 for every provider, thinking level, terminal or widget layout. No utterances,
